@@ -1,0 +1,332 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ── Design tokens ──────────────────────────────────────────────────────────── */
+:root {
+  /* Neutrals */
+  --bg:          #121212;
+  --surface:     #1E1E1E;
+  --surface-2:   #252525;
+  --surface-3:   #2E2E2E;
+  --border:      #2A2A2A;
+  --border-2:    #3A3A3A;
+  /* Nintendo accents */
+  --red:         #FF3C3C;
+  --red-dark:    #881A1A;
+  --blue:        #00A0E0;
+  --blue-dark:   #006A94;
+  /* Semantic */
+  --green:       #22c55e;
+  --amber:       #f59e0b;
+  /* Text */
+  --text:        #F0F0F0;
+  --text-2:      #A0A0A0;
+  --text-3:      #606060;
+  /* Legacy for game pages */
+  --purple:      #a855f7;
+  --cyan:        #06b6d4;
+}
+
+/* ── Reset ──────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; padding: 0; margin: 0; }
+
+html, body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  max-width: 100vw;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 5px; height: 4px; }
+::-webkit-scrollbar-track    { background: var(--surface); }
+::-webkit-scrollbar-thumb    { background: var(--border-2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #4A4A4A; }
+
+/* ── Selection ──────────────────────────────────────────────────────────────── */
+::selection { background: rgba(255, 60, 60, 0.22); color: var(--text); }
+
+/* ── Focus ──────────────────────────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid rgba(255, 60, 60, 0.65);
+  outline-offset: 2px;
+}
+
+/* ── Link reset ─────────────────────────────────────────────────────────────── */
+a { color: inherit; text-decoration: none; }
+
+/* ── Smooth scroll ──────────────────────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+/* ── Gradient text ──────────────────────────────────────────────────────────── */
+
+/* Primary: Nintendo Red → Blue */
+.gradient-text {
+  background: linear-gradient(135deg, #FF3C3C 0%, #FF7070 40%, #00A0E0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Legacy purple (game pages) */
+.gradient-text-purple {
+  background: linear-gradient(135deg, #c084fc 0%, #818cf8 40%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-amber {
+  background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-green {
+  background: linear-gradient(135deg, #4ade80 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Tactile buttons ────────────────────────────────────────────────────────── */
+/* Nintendo Switch–style: flat with a hard shadow underneath that compresses on press */
+
+.btn-tactile-red {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  background: #FF3C3C;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.875rem;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 0 #881A1A;
+  transform: translateY(0);
+  transition: box-shadow 70ms ease, transform 70ms ease;
+  user-select: none;
+  cursor: pointer;
+}
+.btn-tactile-red:hover  { box-shadow: 0 2px 0 #881A1A; transform: translateY(2px); }
+.btn-tactile-red:active { box-shadow: none; transform: translateY(4px); }
+
+.btn-tactile-white {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #121212;
+  font-weight: 800;
+  font-size: 0.875rem;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.35);
+  transform: translateY(0);
+  transition: box-shadow 70ms ease, transform 70ms ease;
+  user-select: none;
+  cursor: pointer;
+}
+.btn-tactile-white:hover  { box-shadow: 0 2px 0 rgba(0,0,0,0.35); transform: translateY(2px); }
+.btn-tactile-white:active { box-shadow: none; transform: translateY(4px); }
+
+.btn-tactile-dark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  background: #252525;
+  color: #F0F0F0;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border: 1px solid #3A3A3A;
+  box-shadow: 0 4px 0 #0A0A0A;
+  transform: translateY(0);
+  transition: box-shadow 70ms ease, transform 70ms ease;
+  user-select: none;
+  cursor: pointer;
+}
+.btn-tactile-dark:hover  { box-shadow: 0 2px 0 #0A0A0A; transform: translateY(2px); }
+.btn-tactile-dark:active { box-shadow: none; transform: translateY(4px); }
+
+/* Nav pill variant (smaller shadow) */
+.btn-tactile-nav {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.75rem;
+  background: #1E1E1E;
+  color: #A0A0A0;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  border: 1px solid #2A2A2A;
+  box-shadow: 0 3px 0 #0A0A0A;
+  transform: translateY(0);
+  transition: box-shadow 70ms ease, transform 70ms ease, color 120ms ease;
+  user-select: none;
+  cursor: pointer;
+}
+.btn-tactile-nav:hover  { color: #F0F0F0; box-shadow: 0 1px 0 #0A0A0A; transform: translateY(2px); }
+.btn-tactile-nav:active { color: #F0F0F0; box-shadow: none; transform: translateY(3px); }
+.btn-tactile-nav.active {
+  background: #FF3C3C;
+  color: #fff;
+  border-color: #FF3C3C;
+  box-shadow: 0 3px 0 #881A1A;
+}
+.btn-tactile-nav.active:hover  { box-shadow: 0 1px 0 #881A1A; transform: translateY(2px); }
+.btn-tactile-nav.active:active { box-shadow: none; transform: translateY(3px); }
+
+/* ── Terminal output ────────────────────────────────────────────────────────── */
+.term-output  { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 1.6; }
+.term-cmd     { color: #22d3ee; }
+.term-success { color: #4ade80; }
+.term-error   { color: #f87171; }
+.term-info    { color: #A0A0A0; }
+.term-story   { color: #c084fc; font-style: italic; }
+.term-prompt  { color: #22d3ee; }
+.term-dir     { color: #4ade80; }
+.term-file    { color: #F0F0F0; }
+.term-exec    { color: #f59e0b; }
+.term-link    { color: #38bdf8; }
+
+/* Terminal cursor */
+.terminal-cursor {
+  display: inline-block;
+  width: 9px;
+  height: 17px;
+  background: #22d3ee;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* ── SQL result table ───────────────────────────────────────────────────────── */
+.sql-table { border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; width: 100%; }
+.sql-table th { background: rgba(255,60,60,0.08); color: #FF7070; padding: 6px 12px; text-align: left; border-bottom: 1px solid #2A2A2A; white-space: nowrap; font-weight: 600; }
+.sql-table td { padding: 5px 12px; border-bottom: 1px solid rgba(42,42,42,0.8); color: #F0F0F0; white-space: nowrap; }
+.sql-table tr:hover td { background: rgba(255,60,60,0.03); }
+.sql-table tr:last-child td { border-bottom: none; }
+
+/* ── Brand name shimmer: "Quest" text animated gradient ─────────────────────── */
+@keyframes text-shimmer {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+.text-shimmer-red {
+  background: linear-gradient(90deg, #FF3C3C 0%, #FF7A7A 38%, #FF3C3C 55%, #FF3C3C 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: text-shimmer 3.5s linear infinite;
+}
+
+/* ── Radial pulse from center ────────────────────────────────────────────────── */
+@keyframes radial-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.06; }
+  50%       { transform: scale(1.18); opacity: 0.03; }
+}
+.animate-radial-pulse { animation: radial-pulse 5s ease-in-out infinite; }
+
+/* ── Slow orbit ──────────────────────────────────────────────────────────────── */
+@keyframes orbit-red {
+  0%   { transform: translate(-50%, -50%) rotate(0deg)   translate(120px) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg) translate(120px) rotate(-360deg); }
+}
+@keyframes orbit-blue {
+  0%   { transform: translate(-50%, -50%) rotate(180deg) translate(140px) rotate(-180deg); }
+  100% { transform: translate(-50%, -50%) rotate(540deg) translate(140px) rotate(-540deg); }
+}
+
+/* ── XP bar ─────────────────────────────────────────────────────────────────── */
+.xp-bar-fill { animation: xp-fill 1.5s ease-out; }
+@keyframes xp-fill { from { width: 0% !important; } }
+
+/* ── Achievement pop ────────────────────────────────────────────────────────── */
+@keyframes achievement-pop {
+  0%   { transform: scale(0.5); opacity: 0; }
+  60%  { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.achievement-unlock { animation: achievement-pop 0.5s ease-out; }
+
+/* ── Glass card (game pages) ────────────────────────────────────────────────── */
+.glass-card {
+  background: rgba(30, 30, 30, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid #2A2A2A;
+}
+
+/* ── Legacy glow utilities (game pages) ─────────────────────────────────────── */
+.glow-purple { box-shadow: 0 0 24px rgba(168,85,247,0.3), 0 0 80px rgba(168,85,247,0.1); }
+.glow-blue   { box-shadow: 0 0 24px rgba(56,189,248,0.3),  0 0 80px rgba(56,189,248,0.1); }
+.glow-cyan   { box-shadow: 0 0 24px rgba(6,182,212,0.3),   0 0 80px rgba(6,182,212,0.1); }
+.glow-green  { box-shadow: 0 0 24px rgba(34,197,94,0.3),   0 0 80px rgba(34,197,94,0.1); }
+.glow-amber  { box-shadow: 0 0 24px rgba(251,191,36,0.3),  0 0 80px rgba(251,191,36,0.1); }
+.glow-red    { box-shadow: 0 0 24px rgba(255,60,60,0.3),   0 0 80px rgba(255,60,60,0.1); }
+
+/* Legacy gradient-border (game pages) */
+.gradient-border { position: relative; }
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(168,85,247,0.5), rgba(56,189,248,0.3), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Adventure badge ring pulse (game pages) */
+@keyframes ring-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50%       { transform: scale(1.2); opacity: 0; }
+}
+.ring-pulse { animation: ring-pulse 2s ease-out infinite; }
+
+/* ── Target Cursor ──────────────────────────────────────────────────────────── */
+.target-cursor-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 9999;
+  mix-blend-mode: difference;
+  transform: translate(-50%, -50%);
+}
+.target-cursor-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  background: #fff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+}
+.target-cursor-corner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border: 3px solid #fff;
+  will-change: transform;
+}
+.corner-tl { transform: translate(-150%, -150%); border-right: none; border-bottom: none; }
+.corner-tr { transform: translate(50%, -150%);   border-left: none;  border-bottom: none; }
+.corner-br { transform: translate(50%, 50%);      border-left: none;  border-top: none;    }
+.corner-bl { transform: translate(-150%, 50%);    border-right: none; border-top: none;    }
