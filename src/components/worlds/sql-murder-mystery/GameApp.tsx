@@ -1,14 +1,13 @@
 'use client'
 
-import { useState, useCallback, useEffect, Suspense } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Zap, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Zap, Search, Lock } from 'lucide-react'
 import Link from 'next/link'
 
-import { executeSQL } from '@/lib/sql-engine'
-import { getMystery, MYSTERY_COUNT } from '@/lib/data/murder-mystery-levels'
 import type { QueryResult } from '@/lib/types'
+import type { SqlLevelContent } from '@/lib/quests/types'
+import { runSqlQuery, submitVerdict } from '@/app/adventures/actions'
 
 import { MissionBrief } from './StoryPanel'
 import { SchemaMap } from './SchemaMap'
@@ -16,166 +15,149 @@ import { SqlConsole } from './SqlConsole'
 import { HintsPanel } from './HintsPanel'
 import { VerdictBox } from './VerdictBox'
 
-// ── Progress detection ─────────────────────────────────────────────────────────
-
-type GameState = {
-  completedStepIds: string[]
-  totalXP: number
-  queriesRun: number
+interface GameAppProps {
+  content: SqlLevelContent
+  level: number
+  count: number
+  isAuthed: boolean
+  /** Cases 1..trialLevel are playable without an account. */
+  trialLevel?: number
 }
 
-function detectProgress(
-  query: string,
-  result: QueryResult,
-  mystery: ReturnType<typeof getMystery>,
-  completedStepIds: string[],
-): { stepId: string | null; xpGained: number } {
-  const q = query.toLowerCase()
-  if (result.error || result.rowCount === 0) return { stepId: null, xpGained: 10 }
-  for (let i = 0; i < mystery.progressSteps.length; i++) {
-    const step = mystery.progressSteps[i]
-    if (!completedStepIds.includes(step.id) && step.detect(q, result)) {
-      return { stepId: step.id, xpGained: step.xp }
-    }
-  }
-  return { stepId: null, xpGained: 10 }
+function stripMd(s: string) {
+  return s.replace(/\*\*(.+?)\*\*/g, '$1')
 }
 
-// ── Progress persistence ───────────────────────────────────────────────────────
+const BLOCKED_NOTICE = {
+  evidence: 'Show your work first: query the records that point to this suspect, then accuse.',
+  rate_limited: 'Too many wrong accusations. The evidence locker is sealed for a few minutes.',
+} as const
 
-const STORAGE_KEY = 'skillquest:sql-murder-mystery-completed'
-
-function readCompletedLevels(): number[] {
-  if (typeof window === 'undefined') return []
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') } catch { return [] }
-}
-
-function saveCompletedLevel(level: number) {
-  const done = readCompletedLevels()
-  if (!done.includes(level)) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...done, level]))
-  }
-}
-
-// ── Main game ──────────────────────────────────────────────────────────────────
-
-function MysteryGame() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-
-  // Levels the user has already earned
-  const [completedLevels, setCompletedLevels] = useState<number[]>(() => readCompletedLevels())
-
-  // Cases 1 & 2 are always accessible; Case 3 unlocks after completing one of them
-  const maxAccessible = completedLevels.length === 0
-    ? 2
-    : Math.min(MYSTERY_COUNT, Math.max(...completedLevels) + 1)
-
-  const rawLevel = parseInt(searchParams.get('level') ?? '1', 10)
-  const requestedLevel = Math.max(1, Math.min(MYSTERY_COUNT, isNaN(rawLevel) ? 1 : rawLevel))
-  // Clamp to what's actually unlocked — prevents direct-URL skipping
-  const levelNum = Math.min(requestedLevel, maxAccessible)
-
-  const mystery = getMystery(levelNum)
-
-  // Redirect if the URL asked for a locked level
-  useEffect(() => {
-    if (requestedLevel > maxAccessible) {
-      router.replace(`/adventures/sql-murder-mystery/play?level=${levelNum}`)
-    }
-  }, [requestedLevel, maxAccessible, levelNum, router])
-
-  const [query, setQuery] = useState(mystery.starterQuery)
+export function GameApp({ content, level, count, isAuthed, trialLevel = 1 }: GameAppProps) {
+  const [query, setQuery] = useState(content.starterQuery)
   const [result, setResult] = useState<QueryResult | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [queryHistory, setQueryHistory] = useState<string[]>([])
-  const [gameState, setGameState] = useState<GameState>({
-    completedStepIds: [],
-    totalXP: 0,
-    queriesRun: 0,
-  })
-  const [showXP, setShowXP] = useState<{ amount: number; id: number } | null>(null)
+  const [completedStepIds, setCompletedStepIds] = useState<string[]>([])
+  const [queriesRun, setQueriesRun] = useState(0)
+  const [earnedXP, setEarnedXP] = useState(0)
+  const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
   const [killerSolved, setKillerSolved] = useState(false)
   const [mastermindSolved, setMastermindSolved] = useState(false)
+  const [caseSolved, setCaseSolved] = useState(false)
+  const [needSignIn, setNeedSignIn] = useState(false)
 
-  const runQuery = useCallback(() => {
-    if (!query.trim()) return
+  const popToast = (text: string) => {
+    const id = Date.now()
+    setToast({ id, text })
+    setTimeout(() => setToast(t => (t?.id === id ? null : t)), 2400)
+  }
+
+  const runQuery = useCallback(async () => {
+    if (!query.trim() || isRunning) return
     setIsRunning(true)
-    setTimeout(() => {
-      const res = executeSQL(query, mystery.db as Parameters<typeof executeSQL>[1])
-      setResult(res)
-      const { stepId, xpGained } = detectProgress(
-        query, res, mystery, gameState.completedStepIds
-      )
-      setGameState(prev => ({
-        completedStepIds:
-          stepId && !prev.completedStepIds.includes(stepId)
-            ? [...prev.completedStepIds, stepId]
-            : prev.completedStepIds,
-        totalXP: prev.totalXP + (res.error ? 0 : xpGained),
-        queriesRun: prev.queriesRun + 1,
-      }))
-      if (!res.error && xpGained > 10) {
-        setShowXP({ amount: xpGained, id: Date.now() })
-        setTimeout(() => setShowXP(null), 2000)
+    try {
+      const res = await runSqlQuery({ level, query, completedStepIds })
+      if (!res.ok || !res.result) {
+        setResult({
+          columns: [], rows: [], rowCount: 0, executionTime: 0,
+          error:
+            res.reason === 'auth_required'
+              ? 'Sign in to play this case.'
+              : res.reason === 'locked'
+                ? 'Finish the previous case to unlock this one.'
+                : res.reason === 'rate_limited'
+                  ? 'Too many queries at once. Wait a moment and try again.'
+                  : 'This case is not available.',
+        })
+        return
       }
+      setResult(res.result)
+      setQueriesRun(n => n + 1)
       setQueryHistory(prev => [query, ...prev.slice(0, 9)])
+      if (res.step && !completedStepIds.includes(res.step.id)) {
+        setCompletedStepIds(prev => [...prev, res.step!.id])
+        popToast(stripMd(res.step.storyEvent))
+      }
+    } finally {
       setIsRunning(false)
-    }, 120)
-  }, [query, gameState.completedStepIds, mystery])
+    }
+  }, [query, isRunning, level, completedStepIds])
 
-  // Handle ERD table click → inject SELECT into editor
   const handleTablePick = useCallback((table: string) => {
     setQuery(`SELECT * FROM ${table}\nLIMIT 5`)
   }, [])
 
+  const onSubmitKiller = useCallback(async (name: string) => {
+    const res = await submitVerdict({ level, kind: 'killer', name })
+    if (res.blocked) return BLOCKED_NOTICE[res.blocked]
+    if (!res.ok || !res.correct) return false
+    setKillerSolved(true)
+    if (res.levelComplete) {
+      setCaseSolved(true)
+      setEarnedXP(res.xpAwarded)
+      if (res.persisted) popToast(`Case closed! +${res.xpAwarded} XP`)
+      else if (level < count && level + 1 <= trialLevel) popToast('Case closed! On to the next case.')
+      else setNeedSignIn(true)
+    }
+    return true
+  }, [level, count, trialLevel])
+
+  const onSubmitMastermind = useCallback(async (name: string) => {
+    const res = await submitVerdict({ level, kind: 'mastermind', name })
+    if (res.blocked) return BLOCKED_NOTICE[res.blocked]
+    if (!res.ok || !res.correct) return false
+    setMastermindSolved(true)
+    if (res.levelComplete) {
+      setCaseSolved(true)
+      setEarnedXP(res.xpAwarded)
+      if (res.persisted) popToast(`Mastermind exposed! +${res.xpAwarded} XP`)
+      else if (level < count && level + 1 <= trialLevel) popToast('Case closed! On to the next case.')
+      else setNeedSignIn(true)
+    }
+    return true
+  }, [level, count, trialLevel])
+
+  // Signed-in players advance sequentially; anonymous players may continue while
+  // the next case is still inside the free trial.
+  const canGoNext = caseSolved && level < count && (isAuthed || level + 1 <= trialLevel)
+
   return (
-    <div
-      className="min-h-screen"
-      style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif" }}
-    >
+    <div className="min-h-screen font-sans text-[var(--c-ink)]">
       {/* ── Atmospheric background ── */}
       <div className="fixed inset-0 pointer-events-none -z-10"
-        style={{
-          background: `
-            radial-gradient(1100px 560px at 78% -10%, rgba(124,92,255,0.08) 0%, transparent 60%),
-            radial-gradient(900px 520px at 0% 0%, rgba(255,68,56,0.05) 0%, transparent 55%),
-            #0a0a0f
-          `
-        }}
+        style={{ background: 'var(--c-bg)' }}
       />
 
       {/* ── Case header ── */}
       <header
-        className="sticky top-16 z-30 border-b"
+        className="lg:sticky lg:top-16 z-30 border-b"
         style={{
-          background: 'rgba(10,10,15,0.85)',
-          backdropFilter: 'blur(12px)',
-          borderColor: 'rgba(255,255,255,0.07)',
+          background: 'var(--c-bg)',
+          borderColor: 'var(--c-line)',
         }}
       >
-        <div className="max-w-[1500px] mx-auto px-5 py-3 flex items-center gap-4 flex-wrap">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-5 py-3 flex items-center gap-x-4 gap-y-2 flex-wrap">
 
-          {/* Case badge + title */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <Link
               href="/adventures/sql-murder-mystery"
-              className="flex items-center gap-1 text-[10px] transition-colors"
-              style={{ color: '#2e2e48' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(124,92,255,0.7)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#2e2e48' }}
+              className="flex items-center gap-1 min-h-[44px] font-mono text-[11px] uppercase tracking-[0.14em] transition-colors"
+              style={{ color: 'var(--c-faint)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--c-accent)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--c-faint)' }}
             >
               <ChevronLeft className="w-3 h-3" /> Cases
             </Link>
-            <div className="w-px h-4" style={{ background: '#1e1e2e' }} />
+            <div className="w-px h-4" style={{ background: 'var(--c-line-2)' }} />
             <div
-              className="flex items-center justify-center rounded-xl"
+              className="flex items-center justify-center rounded-none"
               style={{
                 width: 40,
                 height: 40,
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: '#FFB23E',
+                background: 'var(--c-elev)',
+                border: '1px solid var(--c-line-2)',
+                color: 'var(--c-accent)',
                 flexShrink: 0,
               }}
             >
@@ -184,95 +166,79 @@ function MysteryGame() {
                 <path d="m15.5 15.5 5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
             </div>
-            <div>
-              <h1 className="text-sm font-semibold" style={{ color: 'rgba(236,237,242,0.9)' }}>
-                {mystery.title}
+            <div className="min-w-0">
+              <h1 className="font-display text-sm font-semibold truncate" style={{ color: 'var(--c-ink)' }}>
+                {content.title}
               </h1>
-              <p className="text-[10px] tracking-wide" style={{ color: 'rgba(236,237,242,0.3)' }}>
-                {mystery.setting}
+              <p className="font-mono text-[11px] tracking-wide truncate" style={{ color: 'var(--c-faint)' }}>
+                {content.setting}
               </p>
             </div>
           </div>
 
-          {/* XP + query count */}
           <div className="flex items-center gap-2.5 ml-auto">
             <div
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-none font-mono text-xs font-bold"
               style={{
-                background: 'rgba(124,92,255,0.1)',
-                border: '1px solid rgba(124,92,255,0.22)',
-                color: '#c0a8ff',
+                background: 'rgb(var(--accent-rgb) / 0.08)',
+                border: '1px solid rgb(var(--accent-rgb) / 0.4)',
+                color: 'var(--c-accent)',
               }}
             >
               <Zap className="w-3.5 h-3.5" />
-              {gameState.totalXP} XP
+              {earnedXP} XP
             </div>
             <div
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
-              style={{ background: '#0c0c18', border: '1px solid #1a1a28' }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-none"
+              style={{ background: 'var(--c-elev)', border: '1px solid var(--c-line)' }}
             >
-              <Search className="w-3 h-3" style={{ color: '#252535' }} />
-              <span className="text-[11px] font-mono" style={{ color: '#2e2e48' }}>
-                {gameState.queriesRun}
+              <Search className="w-3 h-3" style={{ color: 'var(--c-faint)' }} />
+              <span className="text-[11px] font-mono" style={{ color: 'var(--c-muted)' }}>
+                {queriesRun}
               </span>
             </div>
-            {/* Next Case — only visible once the current case is fully solved */}
-            {levelNum < MYSTERY_COUNT && completedLevels.includes(levelNum) && (
+            {canGoNext && (
               <Link
-                href={`/adventures/sql-murder-mystery/play?level=${levelNum + 1}`}
-                className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all"
-                style={{
-                  background: 'rgba(255,178,62,0.1)',
-                  border: '1px solid rgba(255,178,62,0.2)',
-                  color: '#d97706',
-                }}
+                href={`/adventures/sql-murder-mystery/play?level=${level + 1}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-none font-mono text-[11px] font-bold uppercase tracking-[0.1em] transition-colors bg-[var(--c-accent)] text-[var(--c-accent-ink)] border border-[var(--c-accent)] hover:bg-transparent hover:text-[var(--c-accent)]"
               >
-                Case {levelNum + 1} <ChevronRight className="w-3 h-3" />
+                Case {level + 1} <ChevronRight className="w-3 h-3" />
               </Link>
             )}
           </div>
         </div>
       </header>
 
-      {/* ── XP pop ── */}
+      {/* ── Toast (clue unlocked / XP) ── */}
       <AnimatePresence>
-        {showXP && (
+        {toast && (
           <motion.div
-            key={showXP.id}
+            key={toast.id}
             initial={{ opacity: 0, y: -16, scale: 0.85 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -24, scale: 0.85 }}
-            className="fixed top-24 right-8 z-50 px-4 py-2 rounded-xl text-white text-sm font-bold"
-            style={{ background: 'rgba(124,92,255,0.9)', boxShadow: '0 0 24px rgba(124,92,255,0.4)' }}
+            className="fixed top-24 left-4 right-4 sm:left-auto sm:right-8 z-50 sm:max-w-xs px-4 py-2.5 rounded-none text-[13px] font-semibold leading-snug"
+            style={{ background: 'var(--c-accent)', color: 'var(--c-accent-ink)', border: '1px solid var(--c-accent)' }}
           >
-            +{showXP.amount} XP
+            {toast.text}
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* ── 2-column workspace ── */}
-      <div className="max-w-[1500px] mx-auto px-5 py-5 pb-16">
-        <div
-          className="grid gap-4"
-          style={{ gridTemplateColumns: '300px 1fr', alignItems: 'start' }}
-        >
-          {/* ① Left: Mission Brief + Hints (sticky) */}
-          <div
-            className="flex flex-col gap-4"
-            style={{ position: 'sticky', top: '5.5rem' }}
-          >
-            <MissionBrief
-              intro={mystery.intro}
-              mastermindName={mystery.mastermindName}
-            />
-            <HintsPanel hints={mystery.hints} />
+      <div className="max-w-[1500px] mx-auto px-4 sm:px-5 py-4 sm:py-5 pb-16">
+        <div className="grid gap-4 items-start grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+          {/* Left: Mission Brief + Hints (sticky on desktop, stacked on top on phones) */}
+          <div className="flex flex-col gap-4 min-w-0 lg:sticky lg:top-[9rem]">
+            <MissionBrief intro={content.intro} hasMastermind={content.hasMastermind} />
+            <HintsPanel level={level} hints={content.hints} />
           </div>
 
-          {/* ② Right: Schema ERD + Console + Verdict (stacked) */}
+          {/* Right: Schema ERD + Console + Verdict (stacked) */}
           <div className="flex flex-col gap-4 min-w-0">
             <SchemaMap
-              schema={mystery.schema}
-              relationships={mystery.schemaRelationships}
+              schema={content.schema}
+              relationships={content.schemaRelationships}
               onTablePick={handleTablePick}
             />
 
@@ -285,44 +251,34 @@ function MysteryGame() {
               onRun={runQuery}
             />
 
+            {needSignIn && (
+              <div
+                className="flex flex-wrap items-center gap-3 rounded-none px-4 py-3"
+                style={{ background: 'rgb(var(--accent-rgb) / 0.08)', border: '1px solid rgb(var(--accent-rgb) / 0.4)' }}
+              >
+                <Lock className="w-4 h-4 shrink-0" style={{ color: 'var(--c-accent)' }} />
+                <p className="text-[13px] flex-1 min-w-[12rem]" style={{ color: 'var(--c-ink)' }}>
+                  Nicely solved! <strong>Sign in</strong> to save your progress and unlock the next case.
+                </p>
+                <Link
+                  href={`/login?next=${encodeURIComponent(`/adventures/sql-murder-mystery/play?level=${level + 1 <= count ? level + 1 : level}`)}`}
+                  className="px-3 py-1.5 rounded-none font-mono text-[12px] font-bold uppercase tracking-[0.1em] shrink-0 transition-colors bg-[var(--c-accent)] text-[var(--c-accent-ink)] border border-[var(--c-accent)] hover:bg-transparent hover:text-[var(--c-accent)]"
+                >
+                  Sign in
+                </Link>
+              </div>
+            )}
+
             <VerdictBox
-              killerName={mystery.killerName}
-              mastermindName={mystery.mastermindName}
+              hasMastermind={content.hasMastermind}
               killerSolved={killerSolved}
               mastermindSolved={mastermindSolved}
-              onKillerSolved={() => {
-                setKillerSolved(true)
-                setGameState(prev => ({ ...prev, totalXP: prev.totalXP + 200 }))
-                setShowXP({ amount: 200, id: Date.now() })
-                setTimeout(() => setShowXP(null), 2000)
-                // Levels with no mastermind are fully complete on killer solve
-                if (!mystery.mastermindName) {
-                  saveCompletedLevel(levelNum)
-                  setCompletedLevels(readCompletedLevels())
-                }
-              }}
-              onMastermindSolved={() => {
-                setMastermindSolved(true)
-                setGameState(prev => ({ ...prev, totalXP: prev.totalXP + 400 }))
-                setShowXP({ amount: 400, id: Date.now() })
-                setTimeout(() => setShowXP(null), 2000)
-                // Mastermind step is always the final step
-                saveCompletedLevel(levelNum)
-                setCompletedLevels(readCompletedLevels())
-              }}
+              onSubmitKiller={onSubmitKiller}
+              onSubmitMastermind={onSubmitMastermind}
             />
           </div>
         </div>
       </div>
     </div>
-  )
-}
-
-// Suspense boundary needed because of useSearchParams
-export function GameApp() {
-  return (
-    <Suspense fallback={<div className="min-h-screen" style={{ background: '#0a0a0f' }} />}>
-      <MysteryGame />
-    </Suspense>
   )
 }

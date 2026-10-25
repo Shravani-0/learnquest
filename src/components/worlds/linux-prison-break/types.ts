@@ -6,15 +6,6 @@ export interface TermLine {
   content: string
 }
 
-export interface Level {
-  id: number
-  room: string
-  story: string
-  objective: string
-  command: string | string[]
-  hint: string
-  successLines: string[]
-  storyEvent: string
-  xp: number
-  unlocks: string
-}
+// Note: the full Level shape (with the winning command + success output) is
+// server-only — see src/lib/server/quests/linux-prison-break.ts. The browser
+// only ever handles LinuxLevelContent (src/lib/quests/types.ts).

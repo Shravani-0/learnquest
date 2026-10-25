@@ -3,110 +3,113 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { Menu, X, Zap } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
+import { signOut } from '@/app/auth/actions'
 
 const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/adventures', label: 'Quests' },
-  { href: '/#how-it-works', label: 'How It Works' },
+  { href: '/#how-it-works', label: 'How it works' },
   { href: '/dashboard', label: 'Dashboard' },
 ]
 
-export default function Navbar() {
+export interface NavUser {
+  displayName: string
+  xp: number
+  clearance: string
+}
+
+function matchActive(href: string, pathname: string) {
+  if (href === '/') return pathname === '/'
+  if (href === '/adventures') return pathname === '/adventures' || pathname.startsWith('/adventures/')
+  if (href === '/dashboard') return pathname.startsWith('/dashboard')
+  return false
+}
+
+export default function Navbar({ user }: { user: NavUser | null }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[#121212] border-b border-[#2A2A2A]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-6">
+    <header className="sq-nav">
+      <div className="sq-nav__in">
+        <Link href="/" className="sq-brand" aria-label="unrust home">
+          <span className="sq-brand__mark" aria-hidden="true">▸</span>
+          <span>un<b>rust</b></span>
+        </Link>
 
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
-            <div className="w-8 h-8 rounded-xl bg-[#FF3C3C] flex items-center justify-center shadow-[0_3px_0_#881A1A] group-hover:shadow-[0_1px_0_#881A1A] group-hover:translate-y-[2px] transition-all duration-[70ms]">
-              <Zap className="w-4 h-4 text-white" fill="currentColor" />
-            </div>
-            <span className="font-black text-lg tracking-tight text-white">
-              Skill<span className="text-[#FF3C3C]">Quest</span>
-            </span>
-          </Link>
-
-          {/* Desktop nav — tactile pill buttons */}
-          <nav className="hidden md:flex items-center gap-2">
-            {navLinks.map(link => {
-              const active = pathname === link.href
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`cursor-target px-4 py-2 rounded-xl text-sm font-bold tracking-wide transition-all duration-[70ms] ${
-                    active
-                      ? 'bg-[#FF3C3C] text-white shadow-[0_3px_0_#881A1A] hover:shadow-[0_1px_0_#881A1A] hover:translate-y-[2px] active:shadow-none active:translate-y-[3px]'
-                      : 'bg-[#1E1E1E] text-[#A0A0A0] border border-[#2A2A2A] shadow-[0_3px_0_#0A0A0A] hover:text-[#F0F0F0] hover:shadow-[0_1px_0_#0A0A0A] hover:translate-y-[2px] active:shadow-none active:translate-y-[3px]'
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              )
-            })}
-          </nav>
-
-          {/* Right: XP tracker + CTA */}
-          <div className="hidden md:flex items-center gap-3 shrink-0">
-            {/* XP pill */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#1E1E1E] border border-[#2A2A2A] shadow-[0_2px_0_#0A0A0A]">
-              <div className="relative flex items-center justify-center w-4 h-4">
-                <div className="w-2 h-2 rounded-full bg-[#00A0E0]" />
-                <div className="absolute inset-0 rounded-full bg-[#00A0E0] opacity-30 animate-ping" style={{ animationDuration: '2.5s' }} />
-              </div>
-              <span className="text-[11px] font-black font-mono text-white tracking-widest">0 XP</span>
-            </div>
-
-            {/* Play Free CTA — red tactile */}
-            <Link
-              href="/adventures"
-              className="cursor-target px-5 py-2 rounded-xl bg-[#FF3C3C] text-white font-black text-sm tracking-wide shadow-[0_4px_0_#881A1A] hover:shadow-[0_2px_0_#881A1A] hover:translate-y-[2px] active:shadow-none active:translate-y-[4px] transition-all duration-[70ms]"
-            >
-              Play Free
-            </Link>
-          </div>
-
-          {/* Mobile toggle */}
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden p-2 rounded-xl bg-[#1E1E1E] border border-[#2A2A2A] shadow-[0_3px_0_#0A0A0A] text-[#A0A0A0] hover:text-[#F0F0F0] hover:shadow-[0_1px_0_#0A0A0A] hover:translate-y-[2px] active:shadow-none active:translate-y-[3px] transition-all duration-[70ms]"
-          >
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile drawer */}
-      {mobileOpen && (
-        <div className="md:hidden border-t border-[#2A2A2A] bg-[#191919]">
-          <div className="px-4 py-4 space-y-2">
-            {navLinks.map(link => (
+        <nav className="sq-nav__links" aria-label="Primary">
+          {navLinks.map((link) => {
+            const active = matchActive(link.href, pathname)
+            return (
               <Link
                 key={link.href}
                 href={link.href}
-                onClick={() => setMobileOpen(false)}
-                className={`block px-4 py-3 rounded-xl text-sm font-bold transition-colors ${
-                  pathname === link.href
-                    ? 'bg-[#FF3C3C] text-white'
-                    : 'bg-[#252525] border border-[#333333] text-[#A0A0A0] hover:text-[#F0F0F0]'
-                }`}
+                className="sq-nav__link sq-draw"
+                aria-current={active ? 'page' : undefined}
               >
                 {link.label}
               </Link>
-            ))}
-            <Link
-              href="/adventures"
-              onClick={() => setMobileOpen(false)}
-              className="block px-4 py-3 rounded-xl bg-[#FF3C3C] text-white font-black text-sm text-center shadow-[0_3px_0_#881A1A] mt-1"
-            >
-              Play Free
+            )
+          })}
+        </nav>
+
+        <div className="sq-nav__right">
+          <span className="sq-xp" title={user ? `clearance: ${user.clearance}` : 'not signed in'}>
+            <span className="sq-xp__dot" aria-hidden="true" />
+            <b>{user?.clearance ?? 'guest'}</b>
+            <span className="sq-xp__sep" aria-hidden="true">·</span>
+            <span className="sq-num">{(user?.xp ?? 0).toLocaleString()}</span> XP
+          </span>
+          {user ? (
+            <form action={signOut}>
+              <button type="submit" className="sq-signout" title="Sign out">
+                <span aria-hidden="true">⏻</span>
+                <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user.displayName}
+                </span>
+              </button>
+            </form>
+          ) : (
+            <Link href="/login" className="sq-btn sq-signin">
+              <span className="sq-btn__fill" aria-hidden="true" />
+              Sign in
             </Link>
-          </div>
+          )}
+        </div>
+
+        <button
+          className="sq-burger"
+          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={mobileOpen}
+          aria-controls="sq-mobile-menu"
+          onClick={() => setMobileOpen((v) => !v)}
+        >
+          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
+      </div>
+
+      {mobileOpen && (
+        <div className="sq-drawer" id="sq-mobile-menu">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              aria-current={matchActive(link.href, pathname) ? 'page' : undefined}
+              onClick={() => setMobileOpen(false)}
+            >
+              {link.label}
+            </Link>
+          ))}
+          {user ? (
+            <form action={signOut}>
+              <button type="submit">Sign out ({user.displayName})</button>
+            </form>
+          ) : (
+            <Link href="/login" onClick={() => setMobileOpen(false)}>
+              Sign in
+            </Link>
+          )}
         </div>
       )}
     </header>

@@ -37,3 +37,6 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# QA screenshots (.shots/, .shots-404/, .shots404/)
+.shots*/

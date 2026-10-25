@@ -47,7 +47,6 @@ export const adventures: Adventure[] = [
     glowColor: 'rgba(6,182,212,0.2)',
     tags: ['pwd', 'ls', 'cd', 'cat', 'grep', 'find', 'chmod'],
     concepts: ['Navigation', 'File I/O', 'Permissions', 'Search', 'Pipes'],
-    isComingSoon: true,
   },
   {
     id: 'git-time-traveler',

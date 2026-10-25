@@ -2,209 +2,165 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Zap, Lightbulb } from 'lucide-react'
+import { Zap, Lightbulb, Lock } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/cn'
 
 import type { TermLine } from './types'
-import { LEVELS } from './levels'
+import type { LinuxLevelContent } from '@/lib/quests/types'
 import { TerminalPanel } from './TerminalPanel'
 import { ObjectiveBar, CommandRef } from './ObjectiveBar'
+import { runLinuxCommand, revealLinuxHint } from '@/app/adventures/actions'
 
-// ── Progress persistence ───────────────────────────────────────────────────────
-
-const STORAGE_KEY = 'skillquest:linux-prison-break-completed'
-
-function readCompletedLevels(): number[] {
-  if (typeof window === 'undefined') return []
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') } catch { return [] }
+interface GameAppProps {
+  levels: LinuxLevelContent[]
+  startLevel: number
+  isAuthed: boolean
 }
 
-function saveCompletedLevel(levelId: number) {
-  const done = readCompletedLevels()
-  if (!done.includes(levelId)) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...done, levelId]))
-  }
-}
+const mkLine = (type: TermLine['type'], content: string): TermLine => ({
+  id: Math.random().toString(36).slice(2), type, content,
+})
 
-function computeStartIdx(): number {
-  const done = readCompletedLevels()
-  const first = LEVELS.findIndex(l => !done.includes(l.id))
-  return first === -1 ? LEVELS.length - 1 : first
-}
+export function GameApp({ levels, startLevel, isAuthed }: GameAppProps) {
+  const startIdx = Math.max(0, Math.min(levels.length - 1, startLevel - 1))
 
-// ── Command processor ──────────────────────────────────────────────────────────
-
-function processCommand(
-  input: string,
-  levelIdx: number,
-  currentRoom: string
-): { lines: TermLine[]; levelComplete: boolean; newRoom: string } {
-  const mkId = () => Math.random().toString(36).slice(2)
-  const raw = input.trim()
-  const cmd = raw.toLowerCase().replace(/\s+/g, ' ')
-  const level = LEVELS[levelIdx]
-  const lines: TermLine[] = []
-
-  const allowed = Array.isArray(level.command)
-    ? level.command.map(c => c.toLowerCase())
-    : [level.command.toLowerCase()]
-
-  const isCorrect = allowed.some(c => cmd === c)
-
-  if (!isCorrect) {
-    if (cmd === 'help' || cmd === 'man') {
-      lines.push({ id: mkId(), type: 'output', content: 'Available: pwd, ls, cd, cat, chmod, grep, find, echo, clear' })
-      return { lines, levelComplete: false, newRoom: currentRoom }
-    }
-    if (cmd === 'clear') {
-      return { lines: [{ id: mkId(), type: 'system', content: '__CLEAR__' }], levelComplete: false, newRoom: currentRoom }
-    }
-    if (cmd.startsWith('ls')) {
-      lines.push({
-        id: mkId(), type: 'output',
-        content: currentRoom.includes('security')
-          ? 'backup.conf  door_codes.enc  emergency.sh  logs/'
-          : 'bed  terminal  note.txt  vent_cover',
-      })
-      return { lines, levelComplete: false, newRoom: currentRoom }
-    }
-    if (cmd.startsWith('pwd')) {
-      lines.push({ id: mkId(), type: 'output', content: currentRoom })
-      return { lines, levelComplete: false, newRoom: currentRoom }
-    }
-    lines.push({ id: mkId(), type: 'error', content: `bash: ${raw.split(' ')[0]}: command not found, or not the objective right now.` })
-    return { lines, levelComplete: false, newRoom: currentRoom }
-  }
-
-  let newRoom = currentRoom
-  if (cmd.startsWith('cd ')) {
-    const parts = cmd.split(' ')
-    newRoom = parts[1].startsWith('/') ? parts[1] : `/prison/${parts[1]}`
-  }
-  if (cmd.includes('/hangar/pod_7')) newRoom = '/hangar/pod_7'
-  if (cmd.includes('&&')) {
-    const parts = cmd.split('&&').map(p => p.trim())
-    if (parts[0].startsWith('cd ')) newRoom = parts[0].split(' ')[1]
-  }
-
-  for (const line of level.successLines) {
-    if (line) lines.push({ id: mkId(), type: 'output', content: line })
-  }
-
-  return { lines, levelComplete: true, newRoom }
-}
-
-// ── Main game component ────────────────────────────────────────────────────────
-
-export function GameApp() {
-  const [completedLevels, setCompletedLevels] = useState<number[]>(() => readCompletedLevels())
   const [lines, setLines] = useState<TermLine[]>([])
   const [input, setInput] = useState('')
-  const [levelIdx, setLevelIdx] = useState(0)
+  const [levelIdx, setLevelIdx] = useState(startIdx)
   const [totalXP, setTotalXP] = useState(0)
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
   const [showXP, setShowXP] = useState<{ amount: number; id: number } | null>(null)
-  const [currentRoom, setCurrentRoom] = useState(LEVELS[0].room)
+  const [currentRoom, setCurrentRoom] = useState(levels[startIdx].room)
   const [showHint, setShowHint] = useState(false)
   const [isFinished, setIsFinished] = useState(false)
+  const [needAuth, setNeedAuth] = useState(false)
   const [wrongAttempts, setWrongAttempts] = useState(0)
+  const [isRunning, setIsRunning] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-
-  const level = LEVELS[levelIdx]
-  const progressPercent = Math.round((levelIdx / LEVELS.length) * 100)
-
-  const mkLine = (type: TermLine['type'], content: string): TermLine => ({
-    id: Math.random().toString(36).slice(2), type, content,
-  })
+  const level = levels[levelIdx]
+  const progressPercent = Math.round((levelIdx / levels.length) * 100)
 
   // Boot sequence
   useEffect(() => {
+    const l0 = levels[startIdx]
     setLines([
       mkLine('system', '╔══════════════════════════════════╗'),
       mkLine('system', '║   PRISON SECURITY SYSTEM v3.7   ║'),
       mkLine('system', '║   CELL BLOCK C — TERMINAL 42    ║'),
       mkLine('system', '╚══════════════════════════════════╝'),
       mkLine('story', ''),
-      mkLine('story', LEVELS[0].story),
+      mkLine('story', l0.story),
       mkLine('story', ''),
-      mkLine('success', `▸ OBJECTIVE: ${LEVELS[0].objective}`),
+      mkLine('success', `▸ OBJECTIVE: ${l0.objective}`),
     ])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Scroll only the terminal's own output, never the page: scrollIntoView would
+    // also scroll the window and drop phone players past the story intro.
+    const out = bottomRef.current?.parentElement
+    if (out) out.scrollTo({ top: out.scrollHeight, behavior: 'smooth' })
   }, [lines])
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     const raw = input.trim()
-    if (!raw) return
+    if (!raw || isRunning || needAuth || isFinished) return
 
-    const inputLine = mkLine('input', raw)
-    const newLines: TermLine[] = [inputLine]
-
+    const newLines: TermLine[] = [mkLine('input', raw)]
     setInputHistory(prev => [raw, ...prev.slice(0, 49)])
     setHistoryIdx(-1)
     setInput('')
     setShowHint(false)
+    setIsRunning(true)
 
-    const { lines: resultLines, levelComplete, newRoom } = processCommand(raw, levelIdx, currentRoom)
+    try {
+      const res = await runLinuxCommand({ level: level.id, command: raw, room: currentRoom })
 
-    if (resultLines.some(l => l.content === '__CLEAR__')) {
-      setLines([])
-      return
-    }
-
-    newLines.push(...resultLines)
-
-    if (!levelComplete && resultLines.some(l => l.type === 'error')) {
-      if (wrongAttempts === 0) {
-        newLines.push(mkLine('output', `💡 ${level.hint}`))
+      if (!res.ok) {
+        newLines.push(mkLine('error',
+          res.reason === 'auth_required'
+            ? 'bash: access denied — sign in to continue.'
+            : res.reason === 'locked'
+              ? 'bash: locked — finish the previous room first.'
+              : res.reason === 'rate_limited'
+                ? 'bash: too many commands — slow down a moment.'
+                : 'bash: this world is not available yet.'))
+        setLines(prev => [...prev, ...newLines])
+        return
       }
-      setWrongAttempts(n => n + 1)
-    }
 
-    if (levelComplete) {
+      // Server asked to clear the screen.
+      if (res.lines.some(l => l.content === '__CLEAR__')) {
+        setLines([])
+        return
+      }
+
+      for (const l of res.lines) newLines.push(mkLine(l.type, l.content))
+      setCurrentRoom(res.newRoom)
+
+      if (!res.correct) {
+        if (res.lines.some(l => l.type === 'error') && wrongAttempts === 0) {
+          newLines.push(mkLine('output', `💡 ${level.hint}`))
+        }
+        setWrongAttempts(n => n + 1)
+        setLines(prev => [...prev, ...newLines])
+        return
+      }
+
+      // Correct.
       setWrongAttempts(0)
-      // Persist this level as completed
-      saveCompletedLevel(level.id)
-      setCompletedLevels(readCompletedLevels())
+      if (res.storyEvent) {
+        newLines.push(mkLine('story', ''))
+        newLines.push(mkLine('story', res.storyEvent))
+        newLines.push(mkLine('story', ''))
+      }
+      if (res.xpAwarded > 0) {
+        setTotalXP(xp => xp + res.xpAwarded)
+        setShowXP({ amount: res.xpAwarded, id: Date.now() })
+        setTimeout(() => setShowXP(null), 2500)
+      }
 
-      newLines.push(mkLine('story', ''))
-      newLines.push(mkLine('story', level.storyEvent))
-      newLines.push(mkLine('story', ''))
-      setCurrentRoom(newRoom)
-      setTotalXP(xp => xp + level.xp)
-      setShowXP({ amount: level.xp, id: Date.now() })
-      setTimeout(() => setShowXP(null), 2500)
+      if (res.needAuthToContinue) {
+        newLines.push(mkLine('success', `Trial level complete!`))
+        newLines.push(mkLine('story', ''))
+        newLines.push(mkLine('system', '🔒 Sign in to save your progress and unlock the rest of the escape.'))
+        setNeedAuth(true)
+        setLines(prev => [...prev, ...newLines])
+        return
+      }
 
       const nextIdx = levelIdx + 1
-      if (nextIdx < LEVELS.length) {
-        newLines.push(mkLine('success', `+${level.xp} XP — Level ${level.id} Complete!`))
+      if (res.nextLevel != null && nextIdx < levels.length) {
+        const next = levels[nextIdx]
+        // Anonymous trial completions earn no XP — don't show a "+0 XP" badge.
+        const xpText = res.xpAwarded > 0 ? `+${res.xpAwarded} XP — ` : ''
+        newLines.push(mkLine('success', `${xpText}Level ${level.id} Complete!`))
         newLines.push(mkLine('story', ''))
-        newLines.push(mkLine('story', `⬛ ${LEVELS[nextIdx].story}`))
+        newLines.push(mkLine('story', `⬛ ${next.story}`))
         newLines.push(mkLine('story', ''))
-        newLines.push(mkLine('success', `▸ OBJECTIVE: ${LEVELS[nextIdx].objective}`))
+        newLines.push(mkLine('success', `▸ OBJECTIVE: ${next.objective}`))
         setLevelIdx(nextIdx)
       } else {
-        newLines.push(mkLine('success', `+${level.xp} XP`))
+        newLines.push(mkLine('success', `+${res.xpAwarded} XP`))
         newLines.push(mkLine('story', ''))
-        newLines.push(mkLine('success', '🏆 MISSION COMPLETE — All 10 levels cleared!'))
-        newLines.push(mkLine('success', `Total XP: ${totalXP + level.xp}`))
+        newLines.push(mkLine('success', `🏆 MISSION COMPLETE — All ${levels.length} levels cleared!`))
         setIsFinished(true)
       }
+      setLines(prev => [...prev, ...newLines])
+    } finally {
+      setIsRunning(false)
     }
-
-    setLines(prev => [...prev, ...newLines])
-  }, [input, levelIdx, currentRoom, level, totalXP, wrongAttempts])
+  }, [input, isRunning, needAuth, isFinished, level, currentRoom, wrongAttempts, levelIdx, levels])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') { handleSubmit(); return }
+    if (e.key === 'Enter') { void handleSubmit(); return }
     if (e.key === 'ArrowUp') {
       e.preventDefault()
       const next = Math.min(historyIdx + 1, inputHistory.length - 1)
@@ -217,28 +173,24 @@ export function GameApp() {
       setHistoryIdx(next)
       setInput(next === -1 ? '' : inputHistory[next] || '')
     }
-    if (e.key === 'Tab') {
-      e.preventDefault()
-      setInput(Array.isArray(level.command) ? level.command[0] : level.command)
-    }
   }
 
   return (
     <div
       className="min-h-screen flex flex-col"
-      style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif", background: '#05050e' }}
+      style={{ background: 'var(--c-bg)', color: 'var(--c-ink)' }}
     >
       {/* ── Sticky header ── */}
       <header
-        className="border-b sticky top-16 z-30"
-        style={{ background: 'rgba(7,7,18,0.92)', backdropFilter: 'blur(20px)', borderColor: 'rgba(6,182,212,0.15)' }}
+        className="border-b lg:sticky lg:top-16 z-30"
+        style={{ background: 'var(--c-bg)', borderColor: 'var(--c-line-2)' }}
       >
-        <div className="max-w-5xl mx-auto px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+        <div className="max-w-5xl mx-auto px-4 sm:px-5 py-3 flex items-center justify-between gap-x-4 gap-y-2 flex-wrap">
           <div className="flex items-center gap-3">
             <span className="text-xl">🔐</span>
             <div>
-              <h1 className="text-sm font-bold text-cyan-300">Linux Prison Break</h1>
-              <p className="text-[10px] font-mono" style={{ color: 'rgba(6,182,212,0.35)' }}>
+              <h1 className="font-display text-sm font-bold uppercase tracking-tight text-[var(--c-ink)]">Linux Prison Break</h1>
+              <p className="text-[11px] font-mono" style={{ color: 'var(--c-muted)' }}>
                 {currentRoom}$
               </p>
             </div>
@@ -246,43 +198,45 @@ export function GameApp() {
 
           {/* Progress bar */}
           <div className="flex items-center gap-3 flex-1 max-w-xs">
-            <span className="text-[10px] font-mono shrink-0" style={{ color: 'rgba(6,182,212,0.35)' }}>
-              {Math.min(levelIdx + 1, LEVELS.length)}/{LEVELS.length}
+            <span className="text-[11px] font-mono shrink-0" style={{ color: 'var(--c-muted)' }}>
+              {Math.min(levelIdx + 1, levels.length)}/{levels.length}
             </span>
             <div
-              className="flex-1 h-1.5 rounded-full overflow-hidden"
-              style={{ background: 'rgba(6,182,212,0.08)' }}
+              className="flex-1 h-1.5 rounded-none overflow-hidden"
+              style={{ background: 'var(--c-line)' }}
             >
               <motion.div
-                className="h-full rounded-full"
-                style={{ background: 'linear-gradient(90deg, #22d3ee, #0891b2)' }}
+                className="h-full rounded-none"
+                style={{ background: 'var(--c-accent)' }}
                 initial={{ width: 0 }}
                 animate={{ width: `${progressPercent}%` }}
                 transition={{ duration: 0.5 }}
               />
             </div>
-            <span className="text-[10px] font-mono shrink-0 text-cyan-500">{progressPercent}%</span>
+            <span className="text-[11px] font-mono shrink-0 text-[var(--c-accent)]">{progressPercent}%</span>
           </div>
 
           <div className="flex items-center gap-2">
             <div
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold"
-              style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.15)', color: '#22d3ee' }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-none font-mono text-xs font-bold"
+              style={{ background: 'rgb(var(--accent-rgb) / 0.08)', border: '1px solid rgb(var(--accent-rgb) / 0.35)', color: 'var(--c-accent)' }}
             >
               <Zap className="w-3.5 h-3.5" />
               {totalXP} XP
             </div>
             <button
-              onClick={() => setShowHint(h => !h)}
+              onClick={() => {
+                // A voluntary hint open is recorded server-side (the XP skill tax).
+                if (!showHint) void revealLinuxHint({ level: level.id })
+                setShowHint(!showHint)
+              }}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors'
+                'flex items-center gap-1.5 px-3 py-1.5 min-h-[40px] lg:min-h-0 rounded-none border font-mono text-xs font-medium transition-colors hover:!border-[var(--c-accent)]'
               )}
               style={showHint
-                ? { background: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.25)', color: '#fbbf24' }
-                : { background: '#0c0c18', borderColor: '#1a1a28', color: '#2e2e48' }
+                ? { background: 'rgb(var(--accent-rgb) / 0.1)', borderColor: 'var(--c-accent)', color: 'var(--c-accent)' }
+                : { background: 'var(--c-elev)', borderColor: 'var(--c-line-2)', color: 'var(--c-muted)' }
               }
-              onMouseEnter={e => { if (!showHint) (e.currentTarget as HTMLElement).style.color = '#5a5a7a' }}
-              onMouseLeave={e => { if (!showHint) (e.currentTarget as HTMLElement).style.color = '#2e2e48' }}
             >
               <Lightbulb className="w-3.5 h-3.5" />
               Hint
@@ -298,10 +252,10 @@ export function GameApp() {
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               className="border-t overflow-hidden"
-              style={{ borderColor: 'rgba(245,158,11,0.12)' }}
+              style={{ borderColor: 'var(--c-line)' }}
             >
-              <div className="max-w-5xl mx-auto px-5 py-3 text-xs" style={{ color: 'rgba(251,191,36,0.7)' }}>
-                <span className="font-semibold text-amber-400">💡 </span>
+              <div className="max-w-5xl mx-auto px-5 py-3 text-xs" style={{ color: 'var(--c-muted)' }}>
+                <span className="font-semibold text-[var(--c-accent)]">💡 </span>
                 {level.hint}
               </div>
             </motion.div>
@@ -317,8 +271,8 @@ export function GameApp() {
             initial={{ opacity: 0, y: -20, scale: 0.8 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -30, scale: 0.8 }}
-            className="fixed top-24 right-8 z-50 px-4 py-2 rounded-xl text-xs font-bold"
-            style={{ background: 'rgba(6,182,212,0.9)', color: '#05050e' }}
+            className="fixed top-24 right-8 z-50 px-4 py-2 rounded-none font-mono text-xs font-bold"
+            style={{ background: 'var(--c-accent)', color: '#181818' }}
           >
             +{showXP.amount} XP
           </motion.div>
@@ -329,16 +283,36 @@ export function GameApp() {
       <div className="flex-1 flex flex-col max-w-5xl mx-auto w-full px-5 py-6 gap-4">
         <ObjectiveBar
           level={level}
+          levels={levels}
           currentLevelIdx={levelIdx}
           isFinished={isFinished}
           totalXP={totalXP}
         />
 
+        {needAuth && !isAuthed && (
+          <div
+            className="flex items-center gap-3 rounded-none px-4 py-3"
+            style={{ background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px solid rgb(var(--accent-rgb) / 0.35)' }}
+          >
+            <Lock className="w-4 h-4 shrink-0 text-[var(--c-accent)]" />
+            <p className="text-[13px] flex-1 text-[var(--c-ink)]">
+              Trial complete — <strong>sign in</strong> to save your XP and continue the escape.
+            </p>
+            <Link
+              href="/login?next=/adventures/linux-prison-break/play"
+              className="px-3 py-1.5 rounded-none font-mono text-[12px] font-bold text-[#181818] shrink-0 hover:opacity-90 transition-opacity"
+              style={{ background: 'var(--c-accent)' }}
+            >
+              Sign in
+            </Link>
+          </div>
+        )}
+
         <TerminalPanel
           lines={lines}
           input={input}
           currentRoom={currentRoom}
-          isFinished={isFinished}
+          isFinished={isFinished || needAuth}
           containerRef={containerRef}
           bottomRef={bottomRef}
           inputRef={inputRef}

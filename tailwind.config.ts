@@ -10,13 +10,13 @@ const config: Config = {
     extend: {
       colors: {
         quest: {
-          // Neutrals — true dark, no blue tint
-          bg:           '#121212',
-          surface:      '#1E1E1E',
-          'surface-2':  '#252525',
-          'surface-3':  '#2E2E2E',
-          border:       '#2A2A2A',
-          'border-2':   '#3A3A3A',
+          // Neutrals — Industrial Brutalism (asphalt/steel/chalk), aliased to the --c-* system
+          bg:           '#181818',
+          surface:      '#1F1F1F',
+          'surface-2':  '#292927',
+          'surface-3':  '#323230',
+          border:       '#30302E',
+          'border-2':   '#454542',
           // Nintendo accent palette
           red:          '#FF3C3C',
           'red-dark':   '#881A1A',
@@ -30,13 +30,15 @@ const config: Config = {
           green:        '#22c55e',
           amber:        '#f59e0b',
           // Text scale
-          text:         '#F0F0F0',
-          'text-2':     '#A0A0A0',
-          'text-3':     '#606060',
+          text:         '#F2F0E6',
+          'text-2':     '#B7B7B0',
+          'text-3':     '#8C8C84',
         },
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
+        sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['var(--font-display)', 'var(--font-sans)', 'sans-serif'],
+        mono: ['var(--font-mono)', 'JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
       },
       animation: {
         'float':           'float 6s ease-in-out infinite',

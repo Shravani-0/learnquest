@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { Terminal } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import type { TermLine } from './types'
@@ -22,53 +23,59 @@ export function TerminalPanel({
   containerRef, bottomRef, inputRef,
   onInputChange, onKeyDown, onClick,
 }: TerminalPanelProps) {
+  // Focus the prompt for mouse/keyboard users only: on phones autofocus would pop
+  // the keyboard over the story before the player has read it.
+  useEffect(() => {
+    if (window.matchMedia('(pointer: fine)').matches) inputRef.current?.focus({ preventScroll: true })
+  }, [inputRef])
+
   return (
     <div
       ref={containerRef}
       onClick={onClick}
-      className="flex-1 min-h-[420px] rounded-xl overflow-hidden flex flex-col cursor-text"
-      style={{ background: '#05050e', border: '1px solid rgba(6,182,212,0.12)' }}
+      className="flex-1 h-[62svh] min-h-[360px] max-h-[640px] rounded-none overflow-hidden flex flex-col cursor-text"
+      style={{ background: '#141414', border: '1px solid var(--c-line-2)' }}
     >
       {/* Title bar */}
       <div
         className="flex items-center gap-2.5 px-4 py-2.5 border-b shrink-0"
-        style={{ background: '#080812', borderColor: 'rgba(6,182,212,0.1)' }}
+        style={{ background: 'var(--c-elev)', borderColor: 'var(--c-line)' }}
       >
         <div className="flex gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
-          <div className="w-2.5 h-2.5 rounded-full bg-amber-500/40" />
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/40" />
+          <div className="w-2.5 h-2.5 rounded-full border border-[var(--c-line-2)] bg-transparent" />
+          <div className="w-2.5 h-2.5 rounded-full border border-[var(--c-line-2)] bg-transparent" />
+          <div className="w-2.5 h-2.5 rounded-full border border-[var(--c-line-2)] bg-transparent" />
         </div>
         <span
-          className="text-[10px] font-mono ml-1"
-          style={{ color: 'rgba(6,182,212,0.25)' }}
+          className="text-[11px] font-mono uppercase tracking-[0.12em] ml-1"
+          style={{ color: 'var(--c-faint)' }}
         >
           bash — {currentRoom}
         </span>
-        <Terminal className="w-3 h-3 ml-auto" style={{ color: 'rgba(6,182,212,0.2)' }} />
+        <Terminal className="w-3 h-3 ml-auto" style={{ color: 'var(--c-faint)' }} />
       </div>
 
       {/* Output area */}
-      <div className="flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed space-y-0.5">
+      <div className="flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto overflow-x-auto font-mono text-xs leading-relaxed space-y-0.5">
         {lines.map(line => (
           <div
             key={line.id}
-            className={cn('whitespace-pre-wrap break-all', {
-              'text-cyan-400':                   line.type === 'input',
-              'text-cyan-100/75':                line.type === 'output',
-              'text-red-400':                    line.type === 'error',
-              'text-purple-400/80 italic':       line.type === 'story',
-              'text-green-400 font-semibold':    line.type === 'success',
-              'text-cyan-900':                   line.type === 'system',
+            className={cn(line.type === 'system' ? 'whitespace-pre' : 'whitespace-pre-wrap break-words', {
+              'text-[var(--c-ink)]':                   line.type === 'input',
+              'text-[var(--c-muted)]':                 line.type === 'output',
+              'text-[#FF7D73]':                        line.type === 'error',
+              'text-[var(--c-ink)] italic':            line.type === 'story',
+              'text-[var(--c-accent)] font-semibold':  line.type === 'success',
+              'text-[var(--c-faint)]':                 line.type === 'system',
             })}
           >
             {line.type === 'input' ? (
               <span>
-                <span className="text-green-400">prison@cell</span>
-                <span style={{ color: 'rgba(6,182,212,0.4)' }}>:</span>
-                <span className="text-blue-400">{currentRoom}</span>
-                <span style={{ color: 'rgba(6,182,212,0.4)' }}>$ </span>
-                <span className="text-cyan-200">{line.content}</span>
+                <span className="text-[var(--c-accent)]">prison@cell</span>
+                <span style={{ color: 'var(--c-faint)' }}>:</span>
+                <span className="text-[var(--c-muted)]">{currentRoom}</span>
+                <span style={{ color: 'var(--c-faint)' }}>$ </span>
+                <span className="text-[var(--c-ink)]">{line.content}</span>
               </span>
             ) : line.content}
           </div>
@@ -76,24 +83,23 @@ export function TerminalPanel({
 
         {/* Live input line */}
         {!isFinished && (
-          <div className="flex items-center mt-1">
-            <span className="text-green-400">prison@cell</span>
-            <span style={{ color: 'rgba(6,182,212,0.4)' }}>:</span>
-            <span className="text-blue-400">{currentRoom}</span>
-            <span style={{ color: 'rgba(6,182,212,0.4)' }}>$ </span>
+          <div className="flex flex-wrap items-center mt-1">
+            <span className="text-[var(--c-accent)]">prison@cell</span>
+            <span style={{ color: 'var(--c-faint)' }}>:</span>
+            <span className="text-[var(--c-muted)]">{currentRoom}</span>
+            <span style={{ color: 'var(--c-faint)' }}>$ </span>
             <input
               ref={inputRef}
               value={input}
               onChange={e => onInputChange(e.target.value)}
               onKeyDown={onKeyDown}
-              className="flex-1 bg-transparent text-cyan-200 outline-none min-w-0"
-              style={{ caretColor: '#22d3ee' }}
-              autoFocus
+              className="flex-1 bg-transparent text-[var(--c-ink)] outline-none focus-visible:outline-none min-w-0"
+              style={{ caretColor: 'var(--c-accent)' }}
               spellCheck={false}
               autoComplete="off"
               autoCorrect="off"
             />
-            <span className="terminal-cursor" />
+            <span className="terminal-cursor" style={{ background: 'var(--c-accent)' }} />
           </div>
         )}
         <div ref={bottomRef} />

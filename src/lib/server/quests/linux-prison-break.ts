@@ -1,4 +1,28 @@
-import type { Level } from './types'
+import 'server-only'
+
+import type { LinuxLevelContent, TermLineDTO } from '@/lib/quests/types'
+
+/**
+ * Linux Prison Break — SERVER ONLY.
+ *
+ * The winning command(s) for each level, the success output lines, and the
+ * story beats live here and are never shipped to the browser. Commands are
+ * graded by `processCommand()` inside the server action; the client only ever
+ * sees the resulting terminal lines the server chooses to return.
+ */
+
+export interface Level {
+  id: number
+  room: string
+  story: string
+  objective: string
+  command: string | string[]
+  hint: string
+  successLines: string[]
+  storyEvent: string
+  xp: number
+  unlocks: string
+}
 
 export const LEVELS: Level[] = [
   {
@@ -152,3 +176,96 @@ export const LEVELS: Level[] = [
     unlocks: 'Freedom',
   },
 ]
+
+export const LINUX_COUNT = LEVELS.length
+
+export function getLinuxLevel(levelNumber: number): Level | null {
+  return LEVELS.find(l => l.id === levelNumber) ?? null
+}
+
+export function linuxLevelXp(levelNumber: number): number {
+  return getLinuxLevel(levelNumber)?.xp ?? 0
+}
+
+/**
+ * Grade one submitted command against a level. Mirrors the old client processor,
+ * but the winning command + success output are known only here.
+ */
+export function processCommand(
+  input: string,
+  levelNumber: number,
+  currentRoom: string,
+): { lines: TermLineDTO[]; levelComplete: boolean; newRoom: string; storyEvent: string | null } {
+  const level = getLinuxLevel(levelNumber)
+  const raw = input.trim()
+  const cmd = raw.toLowerCase().replace(/\s+/g, ' ')
+  const lines: TermLineDTO[] = []
+
+  if (!level) {
+    lines.push({ type: 'error', content: 'No such level.' })
+    return { lines, levelComplete: false, newRoom: currentRoom, storyEvent: null }
+  }
+
+  const allowed = Array.isArray(level.command)
+    ? level.command.map(c => c.toLowerCase())
+    : [level.command.toLowerCase()]
+
+  const isCorrect = allowed.some(c => cmd === c)
+
+  if (!isCorrect) {
+    if (cmd === 'help' || cmd === 'man') {
+      lines.push({ type: 'output', content: 'Available: pwd, ls, cd, cat, chmod, grep, find, echo, clear' })
+      return { lines, levelComplete: false, newRoom: currentRoom, storyEvent: null }
+    }
+    if (cmd === 'clear') {
+      return { lines: [{ type: 'system', content: '__CLEAR__' }], levelComplete: false, newRoom: currentRoom, storyEvent: null }
+    }
+    if (cmd.startsWith('ls')) {
+      lines.push({
+        type: 'output',
+        content: currentRoom.includes('security')
+          ? 'backup.conf  door_codes.enc  emergency.sh  logs/'
+          : 'bed  terminal  note.txt  vent_cover',
+      })
+      return { lines, levelComplete: false, newRoom: currentRoom, storyEvent: null }
+    }
+    if (cmd.startsWith('pwd')) {
+      lines.push({ type: 'output', content: currentRoom })
+      return { lines, levelComplete: false, newRoom: currentRoom, storyEvent: null }
+    }
+    lines.push({ type: 'error', content: `bash: ${raw.split(' ')[0]}: command not found, or not the objective right now.` })
+    return { lines, levelComplete: false, newRoom: currentRoom, storyEvent: null }
+  }
+
+  let newRoom = currentRoom
+  if (cmd.startsWith('cd ')) {
+    const parts = cmd.split(' ')
+    newRoom = parts[1].startsWith('/') ? parts[1] : `/prison/${parts[1]}`
+  }
+  if (cmd.includes('/hangar/pod_7')) newRoom = '/hangar/pod_7'
+  if (cmd.includes('&&')) {
+    const parts = cmd.split('&&').map(p => p.trim())
+    if (parts[0].startsWith('cd ')) newRoom = parts[0].split(' ')[1]
+  }
+
+  for (const line of level.successLines) {
+    if (line) lines.push({ type: 'output', content: line })
+  }
+
+  return { lines, levelComplete: true, newRoom, storyEvent: level.storyEvent }
+}
+
+/** Only the presentational fields — no command, no success output, no story beat. */
+export function toClientContent(level: Level): LinuxLevelContent {
+  return {
+    id: level.id,
+    room: level.room,
+    story: level.story,
+    objective: level.objective,
+    hint: level.hint,
+    xp: level.xp,
+    unlocks: level.unlocks,
+  }
+}
+
+export const LINUX_CONTENT: LinuxLevelContent[] = LEVELS.map(toClientContent)

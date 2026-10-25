@@ -59,7 +59,7 @@ export default function Hero() {
           transition={{ duration: 0.5 }}
           className="text-[11px] font-mono tracking-[0.28em] uppercase text-[#606060] mb-8 select-none"
         >
-          3 Worlds · Real Skills · Free to Play
+          Many Worlds · Real Skills · Free to Play
         </motion.p>
 
         {/* ── Brand name ── */}

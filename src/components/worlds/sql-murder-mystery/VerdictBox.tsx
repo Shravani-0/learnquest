@@ -3,83 +3,99 @@
 import { useState } from 'react'
 
 interface VerdictBoxProps {
-  killerName: string
-  mastermindName?: string
+  hasMastermind: boolean
   killerSolved: boolean
   mastermindSolved: boolean
-  onKillerSolved: () => void
-  onMastermindSolved: () => void
+  /**
+   * Return true if the accusation was correct (verified on the server), false if
+   * wrong, or a notice string when the server refused to grade it (no evidence
+   * yet, or too many wrong guesses).
+   */
+  onSubmitKiller: (name: string) => Promise<boolean | string>
+  onSubmitMastermind: (name: string) => Promise<boolean | string>
 }
 
-function normalize(s: string) {
-  return s.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
+/**
+ * The verdict form holds NO answers. It sends the accusation to the server,
+ * which grades it; the returned boolean drives the right/wrong feedback.
+ */
 export function VerdictBox({
-  killerName,
-  mastermindName,
+  hasMastermind,
   killerSolved,
   mastermindSolved,
-  onKillerSolved,
-  onMastermindSolved,
+  onSubmitKiller,
+  onSubmitMastermind,
 }: VerdictBoxProps) {
   const [killerInput, setKillerInput] = useState('')
   const [killerStatus, setKillerStatus] = useState<'right' | 'wrong' | null>(null)
+  const [killerBusy, setKillerBusy] = useState(false)
   const [mastermindInput, setMastermindInput] = useState('')
   const [mastermindStatus, setMastermindStatus] = useState<'right' | 'wrong' | null>(null)
+  const [mastermindBusy, setMastermindBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
-  const submitKiller = (e: React.FormEvent) => {
+  const submitKiller = async (e: React.FormEvent) => {
     e.preventDefault()
-    const v = normalize(killerInput)
-    if (!v) return
-    const correct = normalize(killerName) === v
-    setKillerStatus(correct ? 'right' : 'wrong')
-    if (correct) onKillerSolved()
+    const v = killerInput.trim()
+    if (!v || killerBusy) return
+    setKillerBusy(true)
+    try {
+      const res = await onSubmitKiller(v)
+      setNotice(typeof res === 'string' ? res : null)
+      setKillerStatus(typeof res === 'string' ? null : res ? 'right' : 'wrong')
+    } finally {
+      setKillerBusy(false)
+    }
   }
 
-  const submitMastermind = (e: React.FormEvent) => {
+  const submitMastermind = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!mastermindName) return
-    const v = normalize(mastermindInput)
-    if (!v) return
-    const aliases = [normalize(mastermindName), 'miranda priestley']
-    const correct = aliases.includes(v)
-    setMastermindStatus(correct ? 'right' : 'wrong')
-    if (correct) onMastermindSolved()
+    const v = mastermindInput.trim()
+    if (!v || mastermindBusy) return
+    setMastermindBusy(true)
+    try {
+      const res = await onSubmitMastermind(v)
+      setNotice(typeof res === 'string' ? res : null)
+      setMastermindStatus(typeof res === 'string' ? null : res ? 'right' : 'wrong')
+    } finally {
+      setMastermindBusy(false)
+    }
   }
 
-  const showMastermind = killerSolved && mastermindName
+  const showMastermind = killerSolved && hasMastermind
 
   return (
     <div
-      className="rounded-xl overflow-hidden"
+      className="rounded-none overflow-hidden"
       style={{
-        background: 'linear-gradient(150deg, rgba(124,92,255,0.07) 0%, #14141e 100%)',
-        border: '1px solid rgba(124,92,255,0.28)',
+        background: 'var(--c-elev)',
+        border: '1px solid var(--c-line-2)',
+        borderTop: '2px solid var(--c-accent)',
       }}
     >
       <div className="px-4 py-4">
         <div className="flex items-start gap-3 mb-4">
           <span
-            className="flex items-center justify-center rounded-xl text-lg flex-shrink-0"
+            className="flex items-center justify-center rounded-none text-lg flex-shrink-0"
             style={{
               width: 40,
               height: 40,
-              background: 'rgba(124,92,255,0.18)',
-              border: '1px solid rgba(124,92,255,0.38)',
+              background: 'rgb(var(--accent-rgb) / 0.08)',
+              border: '1px solid rgb(var(--accent-rgb) / 0.4)',
+              color: 'var(--c-accent)',
             }}
           >
             ⚖
           </span>
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: 'rgba(236,237,242,0.95)' }}>
+            <h3 className="font-display text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>
               Submit your verdict
             </h3>
-            <p className="text-[12.5px] mt-0.5 leading-snug" style={{ color: 'rgba(236,237,242,0.5)' }}>
+            <p className="text-[12.5px] mt-0.5 leading-snug" style={{ color: 'var(--c-muted)' }}>
               {showMastermind ? (
-                <>Found the mastermind? Name <strong style={{ color: '#FFB23E' }}>the person behind it all</strong>.</>
+                <>Found the mastermind? Name <strong style={{ color: 'var(--c-accent)' }}>the person behind it all</strong>.</>
               ) : (
-                <>Found the killer? Name <strong style={{ color: '#FFB23E' }}>the murderer</strong> to close the case.</>
+                <>Found the killer? Name <strong style={{ color: 'var(--c-accent)' }}>the murderer</strong> to close the case.</>
               )}
             </p>
           </div>
@@ -92,53 +108,48 @@ export function VerdictBox({
               value={killerInput}
               onChange={e => { setKillerInput(e.target.value); setKillerStatus(null) }}
               placeholder="e.g. Firstname Lastname"
-              className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none transition-all"
+              className="flex-1 min-w-0 px-3.5 py-2.5 rounded-none font-mono text-sm outline-none transition-colors placeholder:text-[var(--c-faint)] focus:!border-[var(--c-accent)]"
               style={{
-                background: '#0a0a14',
+                background: '#141414',
                 border: killerStatus === 'right'
-                  ? '1px solid #27C2A0'
+                  ? '1px solid var(--c-accent)'
                   : killerStatus === 'wrong'
-                    ? '1px solid #FF4438'
-                    : '1px solid rgba(255,255,255,0.12)',
-                color: 'rgba(236,237,242,0.9)',
-                fontFamily: 'inherit',
+                    ? '1px solid #FF7D73'
+                    : '1px solid var(--c-line-2)',
+                color: 'var(--c-ink)',
               }}
             />
             <button
               type="submit"
-              className="px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-all flex-shrink-0"
-              style={{
-                background: 'linear-gradient(150deg, rgba(124,92,255,0.86) 0%, #7C5CFF 100%)',
-                border: 'none',
-                boxShadow: '0 6px 18px rgba(124,92,255,0.32)',
-              }}
+              disabled={killerBusy}
+              className="px-4 py-2.5 rounded-none font-mono text-sm font-bold uppercase tracking-[0.1em] transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--c-accent)] text-[var(--c-accent-ink)] border border-[var(--c-accent)] enabled:hover:bg-transparent enabled:hover:text-[var(--c-accent)]"
             >
-              Accuse
+              {killerBusy ? 'Checking…' : 'Accuse'}
             </button>
           </form>
         )}
 
         {killerStatus === 'right' && (
           <div
-            className="mt-2 px-3.5 py-2.5 rounded-lg text-[13px] leading-snug"
+            className="mt-2 px-3.5 py-2.5 rounded-none text-[13px] leading-snug"
             style={{
-              background: 'rgba(39,194,160,0.1)',
-              border: '1px solid rgba(39,194,160,0.3)',
-              color: '#8af0d6',
+              background: 'rgb(var(--accent-rgb) / 0.08)',
+              border: '1px solid rgb(var(--accent-rgb) / 0.4)',
+              color: 'var(--c-ink)',
             }}
           >
-            ✓ Case cracked. <strong style={{ color: '#fff' }}>{killerInput.trim()}</strong> is the killer.
-            {mastermindName ? ' But who hired them?' : ' The mystery is solved.'}
+            ✓ Case cracked. <strong style={{ color: 'var(--c-accent)' }}>{killerInput.trim()}</strong> is the killer.
+            {hasMastermind ? ' But who hired them?' : ' The mystery is solved.'}
           </div>
         )}
 
         {killerStatus === 'wrong' && (
           <div
-            className="mt-2 px-3.5 py-2.5 rounded-lg text-[13px]"
+            className="mt-2 px-3.5 py-2.5 rounded-none text-[13px]"
             style={{
-              background: 'rgba(255,68,56,0.09)',
-              border: '1px solid rgba(255,68,56,0.28)',
-              color: '#ffb0a8',
+              background: 'rgb(255 125 115 / 0.08)',
+              border: '1px solid rgb(255 125 115 / 0.4)',
+              color: '#FF7D73',
             }}
           >
             ✗ That&apos;s not the killer. Re-check the evidence.
@@ -147,60 +158,65 @@ export function VerdictBox({
 
         {/* Mastermind verdict */}
         {showMastermind && !mastermindSolved && (
-          <form onSubmit={submitMastermind} className="flex gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+          <form onSubmit={submitMastermind} className="flex gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--c-line)' }}>
             <input
               value={mastermindInput}
               onChange={e => { setMastermindInput(e.target.value); setMastermindStatus(null) }}
               placeholder="Who hired the killer?"
-              className="flex-1 px-3.5 py-2.5 rounded-lg text-sm outline-none transition-all"
+              className="flex-1 min-w-0 px-3.5 py-2.5 rounded-none font-mono text-sm outline-none transition-colors placeholder:text-[var(--c-faint)] focus:!border-[var(--c-accent)]"
               style={{
-                background: '#0a0a14',
+                background: '#141414',
                 border: mastermindStatus === 'right'
-                  ? '1px solid #27C2A0'
+                  ? '1px solid var(--c-accent)'
                   : mastermindStatus === 'wrong'
-                    ? '1px solid #FF4438'
-                    : '1px solid rgba(255,255,255,0.12)',
-                color: 'rgba(236,237,242,0.9)',
-                fontFamily: 'inherit',
+                    ? '1px solid #FF7D73'
+                    : '1px solid var(--c-line-2)',
+                color: 'var(--c-ink)',
               }}
             />
             <button
               type="submit"
-              className="px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-all flex-shrink-0"
-              style={{
-                background: 'linear-gradient(150deg, rgba(255,178,62,0.9) 0%, #d97706 100%)',
-                border: 'none',
-                boxShadow: '0 6px 18px rgba(217,119,6,0.3)',
-              }}
+              disabled={mastermindBusy}
+              className="px-4 py-2.5 rounded-none font-mono text-sm font-bold uppercase tracking-[0.1em] transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--c-accent)] text-[var(--c-accent-ink)] border border-[var(--c-accent)] enabled:hover:bg-transparent enabled:hover:text-[var(--c-accent)]"
             >
-              Accuse
+              {mastermindBusy ? 'Checking…' : 'Accuse'}
             </button>
           </form>
         )}
 
         {mastermindStatus === 'right' && (
           <div
-            className="mt-2 px-3.5 py-2.5 rounded-lg text-[13px] leading-snug"
+            className="mt-2 px-3.5 py-2.5 rounded-none text-[13px] leading-snug"
             style={{
-              background: 'rgba(39,194,160,0.1)',
-              border: '1px solid rgba(39,194,160,0.3)',
-              color: '#8af0d6',
+              background: 'rgb(var(--accent-rgb) / 0.08)',
+              border: '1px solid rgb(var(--accent-rgb) / 0.4)',
+              color: 'var(--c-ink)',
             }}
           >
-            ✓ Mystery solved. <strong style={{ color: '#fff' }}>{mastermindInput.trim()}</strong> is the mastermind.
+            ✓ Mystery solved. <strong style={{ color: 'var(--c-accent)' }}>{mastermindInput.trim()}</strong> is the mastermind.
           </div>
         )}
 
         {mastermindStatus === 'wrong' && (
           <div
-            className="mt-2 px-3.5 py-2.5 rounded-lg text-[13px]"
+            className="mt-2 px-3.5 py-2.5 rounded-none text-[13px]"
             style={{
-              background: 'rgba(255,68,56,0.09)',
-              border: '1px solid rgba(255,68,56,0.28)',
-              color: '#ffb0a8',
+              background: 'rgb(255 125 115 / 0.08)',
+              border: '1px solid rgb(255 125 115 / 0.4)',
+              color: '#FF7D73',
             }}
           >
             ✗ That&apos;s not the mastermind. Follow the money.
+          </div>
+        )}
+
+        {notice && (
+          <div
+            role="status"
+            className="mt-2 px-3.5 py-2.5 rounded-none font-mono text-[12px] leading-snug"
+            style={{ background: 'var(--c-bg)', border: '1px solid var(--c-line-2)', color: 'var(--c-muted)' }}
+          >
+            <span style={{ color: 'var(--c-accent)' }}>! </span>{notice}
           </div>
         )}
       </div>

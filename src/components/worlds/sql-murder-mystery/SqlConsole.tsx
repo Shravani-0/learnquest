@@ -12,15 +12,15 @@ function ResultTable({ result }: { result: QueryResult }) {
   if (result.error) {
     return (
       <div
-        className="flex items-start gap-3 p-4 rounded-lg"
-        style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}
+        className="flex items-start gap-3 p-4 rounded-none"
+        style={{ background: 'rgb(255 125 115 / 0.08)', border: '1px solid rgb(255 125 115 / 0.4)' }}
       >
-        <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+        <XCircle className="w-4 h-4 text-[#FF7D73] shrink-0 mt-0.5" />
         <div>
-          <p className="text-[10px] font-semibold text-red-400 mb-1 tracking-widest uppercase">
+          <p className="font-mono text-[11px] font-semibold text-[#FF7D73] mb-1 tracking-widest uppercase">
             Query Error
           </p>
-          <p className="text-xs text-red-300/70 font-mono leading-relaxed">{result.error}</p>
+          <p className="text-xs text-[var(--c-ink)] font-mono leading-relaxed">{result.error}</p>
         </div>
       </div>
     )
@@ -28,10 +28,10 @@ function ResultTable({ result }: { result: QueryResult }) {
   if (result.rowCount === 0) {
     return (
       <div
-        className="flex items-center gap-2.5 p-4 rounded-lg text-xs"
-        style={{ background: '#0f0f1a', border: '1px solid #1e1e2e', color: 'rgba(245,158,11,0.45)' }}
+        className="flex items-center gap-2.5 p-4 rounded-none font-mono text-xs"
+        style={{ background: '#141414', border: '1px solid var(--c-line)', color: 'var(--c-muted)' }}
       >
-        <AlertCircle className="w-4 h-4 shrink-0" />
+        <AlertCircle className="w-4 h-4 shrink-0" style={{ color: 'var(--c-accent)' }} />
         No records found — refine your query.
       </div>
     )
@@ -39,17 +39,17 @@ function ResultTable({ result }: { result: QueryResult }) {
   return (
     <div>
       <div className="flex items-center gap-2.5 mb-3">
-        <CheckCircle2 className="w-3 h-3" style={{ color: 'rgba(16,185,129,0.6)' }} />
+        <CheckCircle2 className="w-3 h-3" style={{ color: 'var(--c-accent)' }} />
         <span
-          className="text-[10px] font-mono tracking-wider uppercase"
-          style={{ color: 'rgba(245,158,11,0.4)' }}
+          className="text-[11px] font-mono tracking-wider uppercase"
+          style={{ color: 'var(--c-muted)' }}
         >
           {result.rowCount} record{result.rowCount !== 1 ? 's' : ''} · {result.executionTime}ms
         </span>
       </div>
       <div
-        className="overflow-auto rounded-lg max-h-56"
-        style={{ border: '1px solid #1e1e2e' }}
+        className="overflow-auto rounded-none max-h-56 [&_th]:!bg-[var(--c-elev-2)] [&_th]:!text-[var(--c-accent)] [&_th]:!border-[var(--c-line-2)] [&_td]:!text-[var(--c-ink)] [&_td]:!border-[var(--c-line)] [&_tr:hover_td]:!bg-[rgb(var(--accent-rgb)/0.06)]"
+        style={{ border: '1px solid var(--c-line)', background: '#141414' }}
       >
         <table className="sql-table">
           <thead>
@@ -63,7 +63,7 @@ function ResultTable({ result }: { result: QueryResult }) {
                 {result.columns.map(col => (
                   <td key={col}>
                     {row[col] === null
-                      ? <span style={{ color: '#2a2a3e', fontStyle: 'italic' }}>NULL</span>
+                      ? <span style={{ color: 'var(--c-faint)', fontStyle: 'italic' }}>NULL</span>
                       : String(row[col])}
                   </td>
                 ))}
@@ -103,24 +103,25 @@ export function SqlConsole({
       base: 'vs-dark',
       inherit: true,
       rules: [
-        { token: 'keyword.sql',   foreground: '7C5CFF', fontStyle: 'bold' },
-        { token: 'string.sql',    foreground: 'F59E0B' },
-        { token: 'number',        foreground: '10B981' },
-        { token: 'comment',       foreground: '3a3a5a', fontStyle: 'italic' },
-        { token: 'operator.sql',  foreground: 'c084fc' },
-        { token: 'identifier',    foreground: 'c8c8e0' },
+        { token: 'keyword.sql',   foreground: 'E4FF1A', fontStyle: 'bold' },
+        { token: 'string.sql',    foreground: 'B7B7B0' },
+        { token: 'number',        foreground: 'B7B7B0' },
+        { token: 'comment',       foreground: '8C8C84', fontStyle: 'italic' },
+        { token: 'operator.sql',  foreground: 'F2F0E6' },
+        { token: 'identifier',    foreground: 'F2F0E6' },
       ],
       colors: {
-        'editor.background':           '#06060e',
-        'editor.foreground':           '#c8c8e0',
-        'editorLineNumber.foreground': '#1e1e2e',
-        'editorCursor.foreground':     '#d97706',
-        'editor.selectionBackground':  '#7C5CFF33',
-        'editorWhitespace.foreground': '#12121e',
-        'editor.lineHighlightBackground': '#0c0c18',
-        'editorGutter.background':     '#06060e',
+        'editor.background':           '#141414',
+        'editor.foreground':           '#F2F0E6',
+        'editorLineNumber.foreground': '#8C8C84',
+        'editorLineNumber.activeForeground': '#F2F0E6',
+        'editorCursor.foreground':     '#E4FF1A',
+        'editor.selectionBackground':  '#E4FF1A33',
+        'editorWhitespace.foreground': '#292927',
+        'editor.lineHighlightBackground': '#1F1F1F',
+        'editorGutter.background':     '#141414',
         'scrollbar.shadow':            '#00000000',
-        'scrollbarSlider.background':  '#1e1e2e88',
+        'scrollbarSlider.background':  '#29292788',
       },
     })
     monaco.editor.setTheme('sql-mystery')
@@ -130,21 +131,21 @@ export function SqlConsole({
     <div className="space-y-4">
       {/* Editor panel */}
       <div
-        className="rounded-xl overflow-hidden"
-        style={{ background: '#06060e', border: '1px solid #12121e' }}
+        className="rounded-none overflow-hidden"
+        style={{ background: '#141414', border: '1px solid var(--c-line-2)' }}
       >
         {/* macOS-style title bar */}
         <div
           className="flex items-center justify-between px-4 py-2.5 border-b"
-          style={{ background: '#09091a', borderColor: '#12121e' }}
+          style={{ background: 'var(--c-elev)', borderColor: 'var(--c-line)' }}
         >
           <div className="flex items-center gap-2.5">
             <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
-              <div className="w-2.5 h-2.5 rounded-full bg-amber-500/40" />
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/40" />
+              <div className="w-2.5 h-2.5 rounded-full border border-[var(--c-line-2)] bg-transparent" />
+              <div className="w-2.5 h-2.5 rounded-full border border-[var(--c-line-2)] bg-transparent" />
+              <div className="w-2.5 h-2.5 rounded-full border border-[var(--c-line-2)] bg-transparent" />
             </div>
-            <span className="text-[10px] font-mono ml-1" style={{ color: '#2a2a40' }}>
+            <span className="text-[11px] font-mono ml-1" style={{ color: 'var(--c-muted)' }}>
               query.sql
             </span>
           </div>
@@ -153,25 +154,25 @@ export function SqlConsole({
             {queryHistory.length > 0 && (
               <div className="relative group">
                 <button
-                  className="text-[10px] px-2 py-1 rounded transition-colors"
-                  style={{ color: '#2a2a40' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#5a5a7a' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#2a2a40' }}
+                  className="font-mono text-[11px] px-2 py-1 rounded-none transition-colors"
+                  style={{ color: 'var(--c-faint)' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--c-accent)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--c-faint)' }}
                 >
                   history ↑
                 </button>
                 <div
-                  className="absolute right-0 top-7 z-50 hidden group-hover:block w-80 rounded-xl shadow-2xl overflow-hidden"
-                  style={{ background: '#09091a', border: '1px solid #14141f' }}
+                  className="absolute right-0 top-7 z-50 hidden group-hover:block w-80 rounded-none overflow-hidden"
+                  style={{ background: 'var(--c-elev)', border: '1px solid var(--c-line-2)' }}
                 >
                   {queryHistory.map((q, i) => (
                     <button
                       key={i}
                       onClick={() => onQueryChange(q)}
-                      className="w-full text-left px-3 py-2 text-[10px] font-mono truncate border-b last:border-none transition-colors"
-                      style={{ color: '#3a3a5a', borderColor: '#12121e' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#0f0f1e'; (e.currentTarget as HTMLElement).style.color = '#8a8aaa' }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = ''; (e.currentTarget as HTMLElement).style.color = '#3a3a5a' }}
+                      className="w-full text-left px-3 py-2 text-[11px] font-mono truncate border-b last:border-none transition-colors"
+                      style={{ color: 'var(--c-muted)', borderColor: 'var(--c-line)' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--c-elev-2)'; (e.currentTarget as HTMLElement).style.color = 'var(--c-ink)' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = ''; (e.currentTarget as HTMLElement).style.color = 'var(--c-muted)' }}
                     >
                       {q.replace(/\s+/g, ' ')}
                     </button>
@@ -179,7 +180,7 @@ export function SqlConsole({
                 </div>
               </div>
             )}
-            <span className="text-[10px]" style={{ color: '#1e1e2e' }}>⌘↵ to run</span>
+            <span className="font-mono text-[11px]" style={{ color: 'var(--c-faint)' }}>⌘↵ to run</span>
           </div>
         </div>
 
@@ -214,21 +215,21 @@ export function SqlConsole({
         {/* Keyword chips + run button */}
         <div
           className="flex items-center justify-between px-4 py-3 border-t"
-          style={{ borderColor: '#12121e', background: 'rgba(9,9,26,0.5)' }}
+          style={{ borderColor: 'var(--c-line)', background: 'var(--c-elev)' }}
         >
           <div className="flex items-center gap-1.5 flex-wrap">
             {SQL_KEYWORDS.map(kw => (
               <button
                 key={kw}
                 onClick={() => onQueryChange(query + (query.endsWith('\n') || query === '' ? '' : '\n') + kw + ' ')}
-                className="px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider transition-colors"
+                className="px-2.5 py-0.5 min-h-[36px] lg:min-h-0 rounded-none text-[11px] font-mono font-bold tracking-wider transition-colors hover:!border-[var(--c-accent)] hover:!text-[var(--c-accent)]"
                 style={{
-                  color: '#4a8aaa',
-                  background: 'rgba(6,182,212,0.06)',
-                  border: '1px solid rgba(6,182,212,0.12)',
+                  color: 'var(--c-muted)',
+                  background: 'transparent',
+                  border: '1px solid var(--c-line-2)',
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(6,182,212,0.12)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(6,182,212,0.06)' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgb(var(--accent-rgb) / 0.08)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
               >
                 {kw}
               </button>
@@ -238,10 +239,11 @@ export function SqlConsole({
           <button
             onClick={onRun}
             disabled={isRunning || !query.trim()}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg text-white text-xs font-bold tracking-wider uppercase disabled:opacity-40 transition-all"
+            className="flex items-center gap-2 px-5 py-2 rounded-none font-mono text-xs font-bold tracking-wider uppercase border disabled:opacity-40 disabled:cursor-not-allowed transition-colors enabled:hover:!bg-transparent enabled:hover:!text-[var(--c-accent)]"
             style={{
-              background: isRunning ? '#1a1a28' : 'linear-gradient(150deg, rgba(124,92,255,0.86) 0%, #7C5CFF 100%)',
-              boxShadow: isRunning ? 'none' : '0 6px 18px rgba(124,92,255,0.32)',
+              background: isRunning ? 'var(--c-elev-2)' : 'var(--c-accent)',
+              color: isRunning ? 'var(--c-muted)' : 'var(--c-accent-ink)',
+              borderColor: isRunning ? 'var(--c-line-2)' : 'var(--c-accent)',
               whiteSpace: 'nowrap',
             }}
           >
@@ -258,18 +260,18 @@ export function SqlConsole({
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl overflow-hidden"
-          style={{ background: '#0a0a15', border: '1px solid #14141f' }}
+          className="rounded-none overflow-hidden"
+          style={{ background: 'var(--c-elev)', border: '1px solid var(--c-line)' }}
         >
           <div
             className="flex items-center gap-2.5 px-4 py-2.5 border-b"
-            style={{ background: '#09091a', borderColor: '#14141f' }}
+            style={{ background: 'var(--c-elev)', borderColor: 'var(--c-line)' }}
           >
-            <span className="text-[10px] font-semibold text-white/45 tracking-widest uppercase">
+            <span className="font-mono text-[11px] font-semibold text-[var(--c-muted)] tracking-widest uppercase">
               Evidence Report
             </span>
             {!result.error && (
-              <span className="text-[10px] font-mono ml-auto" style={{ color: '#2a2a40' }}>
+              <span className="text-[11px] font-mono ml-auto" style={{ color: 'var(--c-faint)' }}>
                 {result.rowCount} rows · {result.executionTime}ms
               </span>
             )}

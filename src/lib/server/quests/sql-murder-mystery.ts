@@ -1,4 +1,17 @@
+import 'server-only'
+
 import type { QueryResult } from '@/lib/types'
+import type { SchemaRelationship, SqlLevelContent } from '@/lib/quests/types'
+
+/**
+ * SQL Murder Mystery — SERVER ONLY.
+ *
+ * The seed databases, progress-step win conditions (`detect`), the killer and
+ * mastermind names, and the full-answer hints all live here and are never sent
+ * to the browser. The play page derives a stripped-down `SqlLevelContent` via
+ * `toClientContent()`; queries are executed and graded through the server
+ * actions in `src/app/adventures/actions.ts`.
+ */
 
 export type ProgressStep = {
   id: string
@@ -13,13 +26,6 @@ export type ProgressStep = {
   isMastermindStep?: boolean
 }
 
-export type SchemaRelationship = {
-  from: string
-  fromCol: string
-  to: string
-  toCol: string
-}
-
 export type MysteryConfig = {
   id: number
   title: string
@@ -29,6 +35,8 @@ export type MysteryConfig = {
   schemaRelationships?: SchemaRelationship[]
   killerName: string
   mastermindName?: string
+  /** Extra accepted spellings/aliases for the mastermind verdict. */
+  mastermindAliases?: string[]
   intro: string
   progressSteps: ProgressStep[]
   hints: { title: string; hints: string[] }[]
@@ -343,6 +351,7 @@ const level3: MysteryConfig = {
   setting: 'SQL City · January 15, 2018',
   killerName: 'Jeremy Bowers',
   mastermindName: 'Miranda Priestly',
+  mastermindAliases: ['miranda priestley'],
   intro:
     "A crime has taken place and the detective needs your help. The crime was a **murder** that occurred on **January 15, 2018** in **SQL City**. The detective left the precinct immediately. Start by checking the **crime_scene_report** table.",
   db: {
@@ -629,3 +638,91 @@ export function getMystery(level: number): MysteryConfig {
 }
 
 export const MYSTERY_COUNT = Object.keys(mysteries).length
+
+/** Total XP for a case = sum of its progress-step rewards. Granted once on solve. */
+export function levelXp(level: number): number {
+  return getMystery(level).progressSteps.reduce((sum, s) => sum + s.xp, 0)
+}
+
+function normalize(s: string) {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * Given a query + its result, return the first not-yet-completed progress step
+ * that the query satisfies (or null). Narrative only — carries no XP.
+ */
+export function detectStep(
+  level: number,
+  query: string,
+  result: QueryResult,
+  completedStepIds: string[],
+): ProgressStep | null {
+  if (result.error || result.rowCount === 0) return null
+  const q = query.toLowerCase()
+  const mystery = getMystery(level)
+  for (const step of mystery.progressSteps) {
+    if (!completedStepIds.includes(step.id) && step.detect(q, result)) return step
+  }
+  return null
+}
+
+/** Server-side verdict check. The killer/mastermind names never reach the client. */
+export function checkVerdict(level: number, kind: 'killer' | 'mastermind', name: string): boolean {
+  const mystery = getMystery(level)
+  const v = normalize(name)
+  if (!v) return false
+  if (kind === 'killer') return normalize(mystery.killerName) === v
+  if (!mystery.mastermindName) return false
+  const aliases = [normalize(mystery.mastermindName), ...(mystery.mastermindAliases ?? []).map(normalize)]
+  return aliases.includes(v)
+}
+
+/** Which verdict finishes the case: mastermind if present, else killer. */
+export function isCaseCompletingVerdict(level: number, kind: 'killer' | 'mastermind'): boolean {
+  const mystery = getMystery(level)
+  return mystery.mastermindName ? kind === 'mastermind' : kind === 'killer'
+}
+
+/** Strip every answer out and return only what's safe to render in the browser. */
+/** One clue (never the final full-SQL hint), or null if out of range. */
+export function getHint(level: number, group: number, index: number): string | null {
+  const g = getMystery(level).hints[group]
+  if (!g || !Number.isInteger(index) || index < 0 || index >= g.hints.length - 1) return null
+  return g.hints[index]
+}
+
+/**
+ * Investigation steps the server must have detected before a verdict pays out:
+ * you can't take XP for a name you never queried your way to. For the killer on
+ * a case with a mastermind, the "killer" step is the post-accusation confession,
+ * so the evidence is the step just before it.
+ */
+export function requiredEvidence(level: number, kind: 'killer' | 'mastermind'): string[] {
+  const steps = getMystery(level).progressSteps
+  if (kind === 'mastermind') return steps.filter(s => s.isMastermindStep).map(s => s.id)
+  const i = steps.findIndex(s => s.isKillerStep)
+  if (i < 0) return []
+  if (getMystery(level).mastermindName) return i > 0 ? [steps[i - 1].id] : []
+  return [steps[i].id]
+}
+
+export function toClientContent(level: number): SqlLevelContent {
+  const m = getMystery(level)
+  return {
+    id: m.id,
+    title: m.title,
+    setting: m.setting,
+    intro: m.intro,
+    hasMastermind: !!m.mastermindName,
+    schema: m.schema,
+    schemaRelationships: m.schemaRelationships ?? [],
+    starterQuery: m.starterQuery,
+    starterQueries: m.starterQueries,
+    // Only titles + clue counts. Clue text is fetched one at a time through the
+    // revealSqlHint action so every reveal is recorded server-side (XP skill tax).
+    // The last hint of each group is the full SQL solution and is never served.
+    hints: m.hints.map(h => ({ title: h.title, count: Math.max(h.hints.length - 1, 0) })),
+    xpReward: levelXp(level),
+  }
+}

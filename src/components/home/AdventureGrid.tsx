@@ -269,7 +269,7 @@ export default function AdventureGrid() {
             <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
               Choose Your World
             </h2>
-            <p className="text-[#606060] text-sm mt-2">3 story-driven adventures · free to play</p>
+            <p className="text-[#606060] text-sm mt-2">Story-driven adventures · free to play</p>
           </div>
           <Link
             href="/adventures"

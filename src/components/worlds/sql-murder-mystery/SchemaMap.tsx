@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import type { SchemaRelationship } from '@/lib/data/murder-mystery-levels'
+import type { SchemaRelationship } from '@/lib/quests/types'
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 const CARD_W = 204
@@ -24,10 +24,33 @@ function colKey(colName: string): 'pk' | 'fk' | null {
 type Layout = Record<string, { x: number; y: number }>
 type Point = { x: number; y: number }
 
-function buildLayout(schema: Record<string, string[]>): { layout: Layout; canvasW: number; canvasH: number; cols: number } {
+/** Space on the right of a single-column map for relationship curves. */
+const CURVE_GUTTER = 56
+
+/** Natural column count for a schema (desktop). */
+function naturalCols(n: number) {
+  return Math.min(3, Math.max(1, n))
+}
+
+/** Canvas width needed for `cols` columns. */
+function widthFor(cols: number) {
+  return PAD * 2 + cols * CARD_W + (cols - 1) * COL_GAP + (cols === 1 ? CURVE_GUTTER : 0)
+}
+
+/**
+ * Columns to use for a container width: the most that fit while keeping the
+ * table text near full size, so phones reflow to 2 or 1 columns instead of
+ * shrinking the whole map into unreadable type.
+ */
+function colsForWidth(w: number, n: number) {
+  for (let c = naturalCols(n); c > 1; c--) if (w / widthFor(c) >= 0.85) return c
+  return 1
+}
+
+function buildLayout(schema: Record<string, string[]>, maxCols: number): { layout: Layout; canvasW: number; canvasH: number; cols: number } {
   const names = Object.keys(schema)
   const n = names.length
-  const COLS = n <= 3 ? (n === 1 ? 1 : n) : n <= 6 ? 3 : 3
+  const COLS = Math.min(naturalCols(n), Math.max(1, maxCols))
 
   // Group into rows
   const rows: string[][] = []
@@ -48,7 +71,7 @@ function buildLayout(schema: Record<string, string[]>): { layout: Layout; canvas
   })
 
   const lastRowH = rowHeights[rowHeights.length - 1]
-  const canvasW = PAD * 2 + COLS * CARD_W + (COLS - 1) * COL_GAP
+  const canvasW = widthFor(COLS)
   const canvasH = cumY[cumY.length - 1] + lastRowH + PAD
 
   return { layout, canvasW, canvasH, cols: COLS }
@@ -70,8 +93,11 @@ function relPath(
   if (!layout[rel.from] || !layout[rel.to]) return null
   const fromPos = layout[rel.from]
   const toPos = layout[rel.to]
-  const aSide: 'left' | 'right' = fromPos.x + CARD_W <= toPos.x ? 'right' : 'left'
-  const bSide: 'left' | 'right' = aSide === 'right' ? 'left' : 'right'
+  // Same column (single-column phone layout): both ends exit right and the
+  // curve bulges into the gutter instead of crossing the cards.
+  const sameCol = fromPos.x === toPos.x
+  const aSide: 'left' | 'right' = sameCol || fromPos.x + CARD_W <= toPos.x ? 'right' : 'left'
+  const bSide: 'left' | 'right' = sameCol ? 'right' : aSide === 'right' ? 'left' : 'right'
   const a = anchor(rel.from, rel.fromCol, aSide, layout, schema)
   const b = anchor(rel.to, rel.toCol, bSide, layout, schema)
   const dx = Math.max(40, Math.abs(b.x - a.x) * 0.45)
@@ -110,9 +136,10 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
   const [isOpen, setIsOpen] = useState(true)
   const [hover, setHover] = useState<string | null>(null)
   const [scale, setScale] = useState(1)
+  const [maxCols, setMaxCols] = useState(3)
   const wrapRef = useRef<HTMLDivElement>(null)
 
-  const { layout, canvasW, canvasH } = useMemo(() => buildLayout(schema), [schema])
+  const { layout, canvasW, canvasH } = useMemo(() => buildLayout(schema, maxCols), [schema, maxCols])
 
   const rels: SchemaRelationship[] = useMemo(
     () => relationships ?? inferRelationships(schema),
@@ -123,15 +150,18 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
+    const n = Object.keys(schema).length
     const fit = () => {
       const w = el.clientWidth - 2
-      setScale(Math.min(1, Math.max(0.42, w / canvasW)))
+      const cols = colsForWidth(w, n)
+      setMaxCols(cols)
+      setScale(Math.min(1, Math.max(0.42, w / widthFor(Math.min(cols, naturalCols(n))))))
     }
     fit()
     const ro = new ResizeObserver(fit)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [canvasW])
+  }, [schema])
 
   // Related-to-hover set
   const relatedTo = useMemo(() => {
@@ -153,36 +183,36 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
 
   return (
     <div
-      className="rounded-xl overflow-hidden"
-      style={{ background: '#0e0e16', border: '1px solid rgba(255,255,255,0.07)' }}
+      className="rounded-none overflow-hidden"
+      style={{ background: 'var(--c-elev)', border: '1px solid var(--c-line)' }}
     >
       {/* Header */}
       <div
         className="flex items-center gap-3 flex-wrap px-4 py-3 border-b"
-        style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(10,10,20,0.6)' }}
+        style={{ borderColor: 'var(--c-line)', background: 'var(--c-elev)' }}
       >
-        <div className="flex items-center gap-2.5">
-          <svg viewBox="0 0 24 24" width="15" height="15" style={{ color: '#5AA9FF', flexShrink: 0 }}>
+        <div className="flex items-center gap-x-2.5 gap-y-1 flex-wrap min-w-0">
+          <svg viewBox="0 0 24 24" width="15" height="15" style={{ color: 'var(--c-accent)', flexShrink: 0 }}>
             <ellipse cx="12" cy="6" rx="7" ry="3" fill="none" stroke="currentColor" strokeWidth="2"/>
             <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" fill="none" stroke="currentColor" strokeWidth="2"/>
           </svg>
-          <span className="text-sm font-semibold" style={{ color: 'rgba(236,237,242,0.9)' }}>Database Schema</span>
-          <span className="text-[11px]" style={{ color: 'rgba(236,237,242,0.35)' }}>{tableNames.length} tables · click a table to query it</span>
+          <span className="font-display text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Database Schema</span>
+          <span className="font-mono text-[11px]" style={{ color: 'var(--c-faint)' }}>{tableNames.length} tables · click a table to query it</span>
         </div>
         <div className="flex items-center gap-3 ml-auto">
-          <span className="flex items-center gap-1.5 text-[11px]" style={{ color: 'rgba(236,237,242,0.35)' }}>
-            <i className="inline-block w-2 h-2 rounded-sm" style={{ background: '#FFB23E' }} />pk
+          <span className="flex items-center gap-1.5 font-mono text-[11px]" style={{ color: 'var(--c-muted)' }}>
+            <i className="inline-block w-2 h-2 rounded-none" style={{ background: 'var(--c-accent)' }} />pk
           </span>
-          <span className="flex items-center gap-1.5 text-[11px]" style={{ color: 'rgba(236,237,242,0.35)' }}>
-            <i className="inline-block w-2 h-2 rounded-sm" style={{ background: '#5AA9FF' }} />fk
+          <span className="flex items-center gap-1.5 font-mono text-[11px]" style={{ color: 'var(--c-muted)' }}>
+            <i className="inline-block w-2 h-2 rounded-none" style={{ background: 'var(--c-ink)' }} />fk
           </span>
           <button
             onClick={() => setIsOpen(o => !o)}
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors"
+            className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-none transition-colors hover:!border-[var(--c-accent)] hover:!text-[var(--c-accent)]"
             style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: 'rgba(236,237,242,0.55)',
+              background: 'transparent',
+              border: '1px solid var(--c-line-2)',
+              color: 'var(--c-muted)',
             }}
           >
             {isOpen ? 'Hide ▴' : 'Show ▾'}
@@ -196,12 +226,12 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
           ref={wrapRef}
           className="overflow-hidden"
           style={{
-            backgroundImage: `linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)`,
+            backgroundImage: `linear-gradient(rgb(242 240 230 / 0.05) 1px, transparent 1px), linear-gradient(90deg, rgb(242 240 230 / 0.05) 1px, transparent 1px)`,
             backgroundSize: '24px 24px',
             background: `
-              linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px) 0 0 / 24px 24px,
-              linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px) 0 0 / 24px 24px,
-              #0a0a14
+              linear-gradient(rgb(242 240 230 / 0.05) 1px, transparent 1px) 0 0 / 24px 24px,
+              linear-gradient(90deg, rgb(242 240 230 / 0.05) 1px, transparent 1px) 0 0 / 24px 24px,
+              #141414
             `,
             padding: '4px',
           }}
@@ -232,12 +262,12 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
                       <path
                         d={path.d}
                         fill="none"
-                        stroke={lit ? '#7C5CFF' : 'rgba(255,255,255,0.18)'}
+                        stroke={lit ? 'var(--c-accent)' : 'rgb(242 240 230 / 0.22)'}
                         strokeWidth={lit ? 2.2 : 1.5}
                         style={{ transition: 'stroke 0.15s, stroke-width 0.15s' }}
                       />
-                      <circle cx={path.a.x} cy={path.a.y} r={3} fill={lit ? '#7C5CFF' : 'rgba(255,255,255,0.25)'} style={{ transition: 'fill 0.15s' }} />
-                      <circle cx={path.b.x} cy={path.b.y} r={3} fill={lit ? '#7C5CFF' : 'rgba(255,255,255,0.25)'} style={{ transition: 'fill 0.15s' }} />
+                      <circle cx={path.a.x} cy={path.a.y} r={3} fill={lit ? 'var(--c-accent)' : 'rgb(242 240 230 / 0.3)'} style={{ transition: 'fill 0.15s' }} />
+                      <circle cx={path.b.x} cy={path.b.y} r={3} fill={lit ? 'var(--c-accent)' : 'rgb(242 240 230 / 0.3)'} style={{ transition: 'fill 0.15s' }} />
                     </g>
                   )
                 })}
@@ -265,19 +295,17 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
                       top: pos.y,
                       width: CARD_W,
                       zIndex: isHovered ? 4 : isRelated ? 3 : 2,
-                      borderRadius: 10,
+                      borderRadius: 0,
                       overflow: 'hidden',
                       border: isHovered
-                        ? '1px solid #7C5CFF'
+                        ? '1px solid var(--c-accent)'
                         : isRelated
-                          ? '1px solid rgba(124,92,255,0.45)'
+                          ? '1px solid rgb(var(--accent-rgb) / 0.5)'
                           : inFocus && !hover
-                            ? '1px solid rgba(124,92,255,0.35)'
-                            : '1px solid rgba(255,255,255,0.1)',
-                      background: '#14141e',
-                      boxShadow: isHovered
-                        ? '0 0 0 2px rgba(124,92,255,0.28), 0 14px 28px rgba(0,0,0,0.5)'
-                        : '0 8px 20px rgba(0,0,0,0.4)',
+                            ? '1px solid rgb(var(--accent-rgb) / 0.4)'
+                            : '1px solid var(--c-line-2)',
+                      background: 'var(--c-elev)',
+                      boxShadow: 'none',
                       opacity: isDimmed ? 0.35 : 1,
                       transform: isHovered ? 'translateY(-2px)' : 'none',
                       transition: 'opacity 0.15s, transform 0.15s, border-color 0.15s, box-shadow 0.15s',
@@ -296,9 +324,9 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
                         gap: 8,
                         height: HEADER_H,
                         padding: '0 12px',
-                        background: '#1c1c28',
+                        background: 'var(--c-elev-2)',
                         border: 'none',
-                        borderBottom: '1px solid rgba(255,255,255,0.07)',
+                        borderBottom: '1px solid var(--c-line)',
                         cursor: 'pointer',
                         textAlign: 'left',
                       }}
@@ -307,18 +335,17 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
                         style={{
                           width: 7,
                           height: 7,
-                          borderRadius: '50%',
-                          background: '#5AA9FF',
-                          boxShadow: '0 0 6px #5AA9FF',
+                          borderRadius: 0,
+                          background: isHovered ? 'var(--c-accent)' : 'var(--c-faint)',
                           flexShrink: 0,
                         }}
                       />
                       <span
                         style={{
-                          fontFamily: "'JetBrains Mono', monospace",
+                          fontFamily: "var(--font-mono), 'JetBrains Mono', monospace",
                           fontSize: 12,
                           fontWeight: 600,
-                          color: 'rgba(236,237,242,0.9)',
+                          color: 'var(--c-ink)',
                           flex: 1,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -329,8 +356,8 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
                       </span>
                       <span
                         style={{
-                          fontSize: 10,
-                          color: '#7C5CFF',
+                          fontSize: 11,
+                          color: 'var(--c-accent)',
                           opacity: isHovered ? 1 : 0,
                           transition: 'opacity 0.15s',
                         }}
@@ -351,7 +378,7 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
                             gap: 6,
                             height: ROW_H,
                             padding: '0 12px',
-                            fontFamily: "'JetBrains Mono', monospace",
+                            fontFamily: "var(--font-mono), 'JetBrains Mono', monospace",
                             fontSize: 11,
                           }}
                         >
@@ -359,9 +386,9 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
                             style={{
                               width: 12,
                               textAlign: 'center',
-                              fontSize: 9.5,
+                              fontSize: 11,
                               flexShrink: 0,
-                              color: k === 'pk' ? '#FFB23E' : k === 'fk' ? '#5AA9FF' : 'transparent',
+                              color: k === 'pk' ? 'var(--c-accent)' : k === 'fk' ? 'var(--c-ink)' : 'transparent',
                               fontWeight: 700,
                             }}
                           >
@@ -371,10 +398,10 @@ export function SchemaMap({ schema, relationships, focusTables, onTablePick }: S
                             style={{
                               flex: 1,
                               color: k === 'pk'
-                                ? 'rgba(236,237,242,0.92)'
+                                ? 'var(--c-accent)'
                                 : k === 'fk'
-                                  ? '#a8caff'
-                                  : 'rgba(236,237,242,0.55)',
+                                  ? 'var(--c-ink)'
+                                  : 'var(--c-muted)',
                               fontWeight: k === 'pk' ? 600 : 400,
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
