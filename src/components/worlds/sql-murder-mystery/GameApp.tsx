@@ -12,7 +12,7 @@ import { runSqlQuery, submitVerdict } from '@/app/adventures/actions'
 import { MissionBrief } from './StoryPanel'
 import { SchemaMap } from './SchemaMap'
 import { SqlConsole } from './SqlConsole'
-import { HintsPanel } from './HintsPanel'
+import { FieldNotes } from './FieldNotes'
 import { VerdictBox } from './VerdictBox'
 
 interface GameAppProps {
@@ -20,8 +20,8 @@ interface GameAppProps {
   level: number
   count: number
   isAuthed: boolean
-  /** Cases 1..trialLevel are playable without an account. */
-  trialLevel?: number
+  /** Whether the player can open the next case (free trial or owned) — from the server. */
+  nextOpen?: boolean
 }
 
 function stripMd(s: string) {
@@ -33,7 +33,7 @@ const BLOCKED_NOTICE = {
   rate_limited: 'Too many wrong accusations. The evidence locker is sealed for a few minutes.',
 } as const
 
-export function GameApp({ content, level, count, isAuthed, trialLevel = 1 }: GameAppProps) {
+export function GameApp({ content, level, count, isAuthed, nextOpen = false }: GameAppProps) {
   const [query, setQuery] = useState(content.starterQuery)
   const [result, setResult] = useState<QueryResult | null>(null)
   const [isRunning, setIsRunning] = useState(false)
@@ -46,6 +46,7 @@ export function GameApp({ content, level, count, isAuthed, trialLevel = 1 }: Gam
   const [mastermindSolved, setMastermindSolved] = useState(false)
   const [caseSolved, setCaseSolved] = useState(false)
   const [needSignIn, setNeedSignIn] = useState(false)
+  const [needUnlock, setNeedUnlock] = useState(false)
 
   const popToast = (text: string) => {
     const id = Date.now()
@@ -64,8 +65,8 @@ export function GameApp({ content, level, count, isAuthed, trialLevel = 1 }: Gam
           error:
             res.reason === 'auth_required'
               ? 'Sign in to play this case.'
-              : res.reason === 'locked'
-                ? 'Finish the previous case to unlock this one.'
+              : res.reason === 'payment_required'
+                ? 'This case is locked. Unlock it from the case file to play.'
                 : res.reason === 'rate_limited'
                   ? 'Too many queries at once. Wait a moment and try again.'
                   : 'This case is not available.',
@@ -88,39 +89,39 @@ export function GameApp({ content, level, count, isAuthed, trialLevel = 1 }: Gam
     setQuery(`SELECT * FROM ${table}\nLIMIT 5`)
   }, [])
 
+  // A solved case: show the XP, then either point at the next case or explain
+  // what's needed to open it (sign in, or unlock it).
+  const afterSolve = useCallback((xp: number, persisted: boolean, headline: string) => {
+    setCaseSolved(true)
+    setEarnedXP(xp)
+    if (persisted) popToast(`${headline} +${xp} XP`)
+    else if (nextOpen) popToast(`${headline} On to the next case.`)
+    if (level < count && !nextOpen) {
+      if (isAuthed) setNeedUnlock(true)
+      else setNeedSignIn(true)
+    }
+  }, [level, count, nextOpen, isAuthed])
+
   const onSubmitKiller = useCallback(async (name: string) => {
     const res = await submitVerdict({ level, kind: 'killer', name })
     if (res.blocked) return BLOCKED_NOTICE[res.blocked]
     if (!res.ok || !res.correct) return false
     setKillerSolved(true)
-    if (res.levelComplete) {
-      setCaseSolved(true)
-      setEarnedXP(res.xpAwarded)
-      if (res.persisted) popToast(`Case closed! +${res.xpAwarded} XP`)
-      else if (level < count && level + 1 <= trialLevel) popToast('Case closed! On to the next case.')
-      else setNeedSignIn(true)
-    }
+    if (res.levelComplete) afterSolve(res.xpAwarded, res.persisted, 'Case closed!')
     return true
-  }, [level, count, trialLevel])
+  }, [level, afterSolve])
 
   const onSubmitMastermind = useCallback(async (name: string) => {
     const res = await submitVerdict({ level, kind: 'mastermind', name })
     if (res.blocked) return BLOCKED_NOTICE[res.blocked]
     if (!res.ok || !res.correct) return false
     setMastermindSolved(true)
-    if (res.levelComplete) {
-      setCaseSolved(true)
-      setEarnedXP(res.xpAwarded)
-      if (res.persisted) popToast(`Mastermind exposed! +${res.xpAwarded} XP`)
-      else if (level < count && level + 1 <= trialLevel) popToast('Case closed! On to the next case.')
-      else setNeedSignIn(true)
-    }
+    if (res.levelComplete) afterSolve(res.xpAwarded, res.persisted, 'Mastermind exposed!')
     return true
-  }, [level, count, trialLevel])
+  }, [level, afterSolve])
 
-  // Signed-in players advance sequentially; anonymous players may continue while
-  // the next case is still inside the free trial.
-  const canGoNext = caseSolved && level < count && (isAuthed || level + 1 <= trialLevel)
+  // The next case is a link only when the player can actually open it.
+  const canGoNext = caseSolved && level < count && nextOpen
 
   return (
     <div className="min-h-screen font-sans text-[var(--c-ink)]">
@@ -231,7 +232,7 @@ export function GameApp({ content, level, count, isAuthed, trialLevel = 1 }: Gam
           {/* Left: Mission Brief + Hints (sticky on desktop, stacked on top on phones) */}
           <div className="flex flex-col gap-4 min-w-0 lg:sticky lg:top-[9rem]">
             <MissionBrief intro={content.intro} hasMastermind={content.hasMastermind} />
-            <HintsPanel level={level} hints={content.hints} />
+            <FieldNotes level={level} />
           </div>
 
           {/* Right: Schema ERD + Console + Verdict (stacked) */}
@@ -265,6 +266,24 @@ export function GameApp({ content, level, count, isAuthed, trialLevel = 1 }: Gam
                   className="px-3 py-1.5 rounded-none font-mono text-[12px] font-bold uppercase tracking-[0.1em] shrink-0 transition-colors bg-[var(--c-accent)] text-[var(--c-accent-ink)] border border-[var(--c-accent)] hover:bg-transparent hover:text-[var(--c-accent)]"
                 >
                   Sign in
+                </Link>
+              </div>
+            )}
+
+            {needUnlock && (
+              <div
+                className="flex flex-wrap items-center gap-3 rounded-none px-4 py-3"
+                style={{ background: 'rgb(var(--accent-rgb) / 0.08)', border: '1px solid rgb(var(--accent-rgb) / 0.4)' }}
+              >
+                <Lock className="w-4 h-4 shrink-0" style={{ color: 'var(--c-accent)' }} />
+                <p className="text-[13px] flex-1 min-w-[12rem]" style={{ color: 'var(--c-ink)' }}>
+                  Case closed! <strong>Case {level + 1}</strong> is locked. Unlock it, the whole world, or go Pro.
+                </p>
+                <Link
+                  href={`/adventures/sql-murder-mystery?unlock=${level + 1}#unlock`}
+                  className="px-3 py-1.5 rounded-none font-mono text-[12px] font-bold uppercase tracking-[0.1em] shrink-0 transition-colors bg-[var(--c-accent)] text-[var(--c-accent-ink)] border border-[var(--c-accent)] hover:bg-transparent hover:text-[var(--c-accent)]"
+                >
+                  Unlock
                 </Link>
               </div>
             )}

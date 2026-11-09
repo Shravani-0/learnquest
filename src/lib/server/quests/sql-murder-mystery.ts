@@ -685,13 +685,6 @@ export function isCaseCompletingVerdict(level: number, kind: 'killer' | 'masterm
 }
 
 /** Strip every answer out and return only what's safe to render in the browser. */
-/** One clue (never the final full-SQL hint), or null if out of range. */
-export function getHint(level: number, group: number, index: number): string | null {
-  const g = getMystery(level).hints[group]
-  if (!g || !Number.isInteger(index) || index < 0 || index >= g.hints.length - 1) return null
-  return g.hints[index]
-}
-
 /**
  * Investigation steps the server must have detected before a verdict pays out:
  * you can't take XP for a name you never queried your way to. For the killer on
@@ -719,10 +712,6 @@ export function toClientContent(level: number): SqlLevelContent {
     schemaRelationships: m.schemaRelationships ?? [],
     starterQuery: m.starterQuery,
     starterQueries: m.starterQueries,
-    // Only titles + clue counts. Clue text is fetched one at a time through the
-    // revealSqlHint action so every reveal is recorded server-side (XP skill tax).
-    // The last hint of each group is the full SQL solution and is never served.
-    hints: m.hints.map(h => ({ title: h.title, count: Math.max(h.hints.length - 1, 0) })),
     xpReward: levelXp(level),
   }
 }

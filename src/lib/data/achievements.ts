@@ -2,7 +2,7 @@ import type { Achievement, LeaderboardEntry } from '@/lib/types'
 
 export const achievements: Achievement[] = [
   { id: 'first-query', title: 'First Blood', description: 'Run your first SQL query', icon: '⚡', xpReward: 50, rarity: 'common' },
-  { id: 'murder-solved', title: 'Case Closed', description: 'Solve the SQL Murder Mystery', icon: '🔍', xpReward: 500, rarity: 'epic' },
+  { id: 'murder-solved', title: 'Case Closed', description: 'Close the case in SQL Detective', icon: '🔍', xpReward: 500, rarity: 'epic' },
   { id: 'prison-escape', title: 'Jailbreak', description: 'Complete the Linux Prison Break', icon: '🔓', xpReward: 400, rarity: 'rare' },
   { id: 'no-hints', title: 'Pure Instinct', description: 'Complete an adventure without using hints', icon: '🧠', xpReward: 300, rarity: 'rare' },
   { id: 'speed-run', title: 'Speed Demon', description: 'Complete an adventure in under 15 minutes', icon: '⚡', xpReward: 250, rarity: 'rare' },
@@ -13,6 +13,7 @@ export const achievements: Achievement[] = [
   { id: 'git-guru', title: 'Timeline Keeper', description: 'Complete the Git Time Traveler', icon: '⏳', xpReward: 600, rarity: 'epic' },
   { id: 'hacker', title: 'White Hat', description: 'Complete the Hacker Academy', icon: '🕵️', xpReward: 700, rarity: 'epic' },
   { id: 'social', title: 'Guild Member', description: 'Share a completion on the leaderboard', icon: '🤝', xpReward: 50, rarity: 'common' },
+  { id: 'first-duel-win', title: 'Called Out', description: 'Win your first challenge against a friend', icon: '⚔️', xpReward: 0, rarity: 'rare' },
 ]
 
 export const leaderboard: LeaderboardEntry[] = [

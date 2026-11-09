@@ -19,8 +19,6 @@ export interface SqlLevelContent {
   schemaRelationships: SchemaRelationship[]
   starterQuery: string
   starterQueries: string[]
-  /** Hint groups: titles + how many clues each has. Clue text comes from revealSqlHint. */
-  hints: { title: string; count: number }[]
   xpReward: number
 }
 
@@ -35,7 +33,8 @@ export interface LinuxLevelContent {
   unlocks: string
 }
 
-export type AccessReason = 'coming_soon' | 'auth_required' | 'locked' | 'not_configured' | 'rate_limited'
+export type AccessReason =
+  | 'coming_soon' | 'auth_required' | 'payment_required' | 'locked' | 'not_configured' | 'rate_limited'
 
 export interface SqlRunResult {
   ok: boolean
@@ -81,4 +80,6 @@ export interface LinuxRunResult {
   nextLevel: number | null
   /** Anonymous player finished the free trial level — must sign in to continue. */
   needAuthToContinue: boolean
+  /** Signed-in player finished a level and the next one isn't unlocked yet — offer to buy it. */
+  needPurchaseToContinue: boolean
 }

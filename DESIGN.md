@@ -284,8 +284,8 @@ home index ("needs operator / sudo / daemon / kernel"), so XP has concrete pull.
 
 **Wiring (build on the existing secure pipeline, don't rebuild it).**
 - `awardFor()` routes both completion actions (`submitVerdict`, `runLinuxCommand`); `hintsUsed` is
-  threaded from the games (SQL `HintsPanel` reveal count; Linux hint-button opens per level). With
-  `hintsUsed` absent it equals base — zero regression.
+  the server-recorded count (Linux hint-button opens per level; the SQL game has no clues since
+  Field Notes became a player notepad, 2026-10-25). With no hints it equals base.
 - `revalidatePath('/', 'layout')` after each award so the navbar clearance/XP refreshes live.
 - Display: `clearanceForXp()` in the layout (navbar), `app/page.tsx` (console `whoami` session),
   and the dashboard (new Clearance panel: current → next rank, XP-to-next, unlocks list).
@@ -305,9 +305,13 @@ Owner: "match the other pages with the home page." Every page now uses the `sq-*
   with its clearance gate). framer-motion removed.
 - **`/adventures/[slug]`** (`WorldLevelsPage`): `cd ..` back link, header + `boot world` CTA, a `stat`
   readout strip, and the levels as a numbered process track (`.sq-level`: open / cleared / locked).
-- **`/dashboard`** (`DashboardView`): `whoami` identity header with an XP meter, `stats` readout, and
-  panels with command bars (`ls ~/worlds`, `skills --progress`, `tail activity.log`, `sudo -l`
-  clearance, `ls ~/badges`, `top --sort=xp`). Now a server component (no framer-motion).
+- **`/dashboard`** (`DashboardView`): compact identity header with ONE meter (clearance → next
+  clearance; the separate 1000-XP "level" bar was dropped as a competing system), a sticky section bar
+  (`DashboardJump`, anchors + IntersectionObserver `aria-current`), a **Next up** card (resume the
+  in-progress world, else start the next one), a small stats strip, then Worlds (all six; live ones
+  show levels cleared, locked ones show their clearance gate) + Recent activity, and a side column of
+  Unlocks (with a one-line "how XP works"), Badges (earned + next three with how to earn them) and
+  Leaderboard (your row appended when outside the top 8). Panel titles are plain English.
 - **Auth** (login / signup / forgot / reset): a console window (`AuthShell` takes a `command`), `--flag`
   field labels, `sq-btn` submit, `error:` / `ok:` message lines.
 - **Games**: both worlds' hardcoded navy/purple/cyan palettes remapped to asphalt/steel/chalk + hazard,

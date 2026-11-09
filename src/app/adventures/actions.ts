@@ -139,7 +139,7 @@ export async function submitVerdict(input: {
   }
 
   const stepIds = sql.getMystery(level).progressSteps.map(s => s.id)
-  const hintsUsed = progress?.hintsUsed ?? 0 // counted server-side by revealSqlHint
+  const hintsUsed = progress?.hintsUsed ?? 0 // server-recorded hint reveals (none in SQL today: Field Notes is a notepad)
   const award = awardFor({ base: sql.levelXp(level), hintsUsed })
   const { xpAwarded } = await access.grantCompletion(gate.userId, SQL_ID, level, award.total, stepIds)
   await access.unlockAchievement(gate.userId, 'murder-solved')
@@ -167,7 +167,7 @@ export async function runLinuxCommand(input: {
     return {
       ok: false, reason: gate.reason, correct: false, lines: [], storyEvent: null,
       newRoom: room, levelComplete: false, xpAwarded: 0, persisted: false,
-      nextLevel: null, needAuthToContinue: false,
+      nextLevel: null, needAuthToContinue: false, needPurchaseToContinue: false,
     }
   }
 
@@ -175,7 +175,7 @@ export async function runLinuxCommand(input: {
     return {
       ok: false, reason: 'rate_limited', correct: false, lines: [], storyEvent: null,
       newRoom: room, levelComplete: false, xpAwarded: 0, persisted: false,
-      nextLevel: null, needAuthToContinue: false,
+      nextLevel: null, needAuthToContinue: false, needPurchaseToContinue: false,
     }
   }
 
@@ -185,7 +185,7 @@ export async function runLinuxCommand(input: {
   if (!levelComplete) {
     return {
       ok: true, correct: false, lines, storyEvent: null, newRoom,
-      levelComplete: false, xpAwarded: 0, persisted: false, nextLevel: null, needAuthToContinue: false,
+      levelComplete: false, xpAwarded: 0, persisted: false, nextLevel: null, needAuthToContinue: false, needPurchaseToContinue: false,
     }
   }
 
@@ -199,9 +199,11 @@ export async function runLinuxCommand(input: {
     if (level >= LINUX_COUNT) await access.unlockAchievement(gate.userId, 'prison-escape')
     if (xpAwarded > 0 && hintsUsed === 0) await access.unlockAchievement(gate.userId, 'no-hints')
     revalidatePath('/', 'layout') // refresh the navbar clearance/XP pill
+    const nextLocked = nextLevel != null && !(await access.canOpenLevel(gate.userId, LINUX_ID, nextLevel))
     return {
       ok: true, correct: true, lines, storyEvent, newRoom,
-      levelComplete: true, xpAwarded, persisted: true, nextLevel, needAuthToContinue: false,
+      levelComplete: true, xpAwarded, persisted: true, nextLevel,
+      needAuthToContinue: false, needPurchaseToContinue: nextLocked,
     }
   }
 
@@ -212,27 +214,8 @@ export async function runLinuxCommand(input: {
     ok: true, correct: true, lines, storyEvent, newRoom,
     levelComplete: true, xpAwarded: 0, persisted: false, nextLevel,
     needAuthToContinue: nextLevel != null && nextLevel > access.TRIAL_LEVEL,
+    needPurchaseToContinue: false,
   }
-}
-
-/**
- * Reveal one SQL clue. Clue text never ships with the page; each reveal by a
- * signed-in player is recorded server-side and taxes that case's XP. The final
- * full-SQL hint of each group is never served.
- */
-export async function revealSqlHint(input: { level: number; group: number; index: number }): Promise<HintResult> {
-  const level = clampLevel(input.level, sql.MYSTERY_COUNT)
-  const gate = await access.checkAccess(SQL_ID, level)
-  if (!gate.ok) return { ok: false, reason: gate.reason }
-  if (!allow(await clientKey(gate.userId), 'hint', 30, MINUTE)) return { ok: false, reason: 'rate_limited' }
-
-  const group = Math.floor(Number(input.group))
-  const index = Math.floor(Number(input.index))
-  const text = sql.getHint(level, group, index)
-  if (text == null) return { ok: false }
-
-  if (gate.userId) await access.appendProgressKeys(gate.userId, SQL_ID, level, [`hint:${group}:${index}`])
-  return { ok: true, text }
 }
 
 /** Record a voluntary Linux hint open (the XP skill tax). The hint text itself is level content. */

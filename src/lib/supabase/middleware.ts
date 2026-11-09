@@ -62,5 +62,28 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // A username is mandatory before anything that records progress: signed-in
+  // players who haven't picked one (OAuth sign-ups, older accounts) are sent to
+  // /welcome from the dashboard and the play screens (whose server actions post
+  // to the same paths). Public pages — home, catalog, world detail — always load.
+  const needsUsername =
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/challenges') || // your name is shown to your opponent
+    /^\/adventures\/[^/]+\/play(\/|$)/.test(pathname)
+  if (user && needsUsername) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username_set')
+      .eq('id', user.id)
+      .maybeSingle()
+    if (!profile?.username_set) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/welcome'
+      url.search = ''
+      url.searchParams.set('next', pathname + request.nextUrl.search)
+      return NextResponse.redirect(url)
+    }
+  }
+
   return supabaseResponse
 }

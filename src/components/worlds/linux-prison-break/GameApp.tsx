@@ -36,6 +36,7 @@ export function GameApp({ levels, startLevel, isAuthed }: GameAppProps) {
   const [showHint, setShowHint] = useState(false)
   const [isFinished, setIsFinished] = useState(false)
   const [needAuth, setNeedAuth] = useState(false)
+  const [needUnlock, setNeedUnlock] = useState<number | null>(null)
   const [wrongAttempts, setWrongAttempts] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
 
@@ -71,7 +72,7 @@ export function GameApp({ levels, startLevel, isAuthed }: GameAppProps) {
 
   const handleSubmit = useCallback(async () => {
     const raw = input.trim()
-    if (!raw || isRunning || needAuth || isFinished) return
+    if (!raw || isRunning || needAuth || needUnlock != null || isFinished) return
 
     const newLines: TermLine[] = [mkLine('input', raw)]
     setInputHistory(prev => [raw, ...prev.slice(0, 49)])
@@ -87,8 +88,8 @@ export function GameApp({ levels, startLevel, isAuthed }: GameAppProps) {
         newLines.push(mkLine('error',
           res.reason === 'auth_required'
             ? 'bash: access denied — sign in to continue.'
-            : res.reason === 'locked'
-              ? 'bash: locked — finish the previous room first.'
+            : res.reason === 'payment_required'
+              ? 'bash: locked — unlock this room to continue.'
               : res.reason === 'rate_limited'
                 ? 'bash: too many commands — slow down a moment.'
                 : 'bash: this world is not available yet.'))
@@ -136,6 +137,16 @@ export function GameApp({ levels, startLevel, isAuthed }: GameAppProps) {
         return
       }
 
+      if (res.needPurchaseToContinue && res.nextLevel != null) {
+        const xpText = res.xpAwarded > 0 ? `+${res.xpAwarded} XP — ` : ''
+        newLines.push(mkLine('success', `${xpText}Level ${level.id} Complete!`))
+        newLines.push(mkLine('story', ''))
+        newLines.push(mkLine('system', `🔒 Level ${res.nextLevel} is locked. Unlock it to keep going.`))
+        setNeedUnlock(res.nextLevel)
+        setLines(prev => [...prev, ...newLines])
+        return
+      }
+
       const nextIdx = levelIdx + 1
       if (res.nextLevel != null && nextIdx < levels.length) {
         const next = levels[nextIdx]
@@ -157,7 +168,7 @@ export function GameApp({ levels, startLevel, isAuthed }: GameAppProps) {
     } finally {
       setIsRunning(false)
     }
-  }, [input, isRunning, needAuth, isFinished, level, currentRoom, wrongAttempts, levelIdx, levels])
+  }, [input, isRunning, needAuth, needUnlock, isFinished, level, currentRoom, wrongAttempts, levelIdx, levels])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') { void handleSubmit(); return }
@@ -308,11 +319,30 @@ export function GameApp({ levels, startLevel, isAuthed }: GameAppProps) {
           </div>
         )}
 
+        {needUnlock != null && (
+          <div
+            className="flex flex-wrap items-center gap-3 rounded-none px-4 py-3"
+            style={{ background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px solid rgb(var(--accent-rgb) / 0.35)' }}
+          >
+            <Lock className="w-4 h-4 shrink-0 text-[var(--c-accent)]" />
+            <p className="text-[13px] flex-1 min-w-[12rem] text-[var(--c-ink)]">
+              Room cleared. <strong>Level {needUnlock}</strong> is locked. Unlock it, the whole world, or go Pro.
+            </p>
+            <Link
+              href={`/adventures/linux-prison-break?unlock=${needUnlock}#unlock`}
+              className="px-3 py-1.5 rounded-none font-mono text-[12px] font-bold text-[#181818] shrink-0 hover:opacity-90 transition-opacity"
+              style={{ background: 'var(--c-accent)' }}
+            >
+              Unlock
+            </Link>
+          </div>
+        )}
+
         <TerminalPanel
           lines={lines}
           input={input}
           currentRoom={currentRoom}
-          isFinished={isFinished || needAuth}
+          isFinished={isFinished || needAuth || needUnlock != null}
           containerRef={containerRef}
           bottomRef={bottomRef}
           inputRef={inputRef}

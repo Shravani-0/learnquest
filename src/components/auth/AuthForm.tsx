@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react'
 import Link from 'next/link'
 import { signIn, signUp, signInWithOAuth, type AuthState } from '@/app/auth/actions'
 import { AuthShell, AuthField, SubmitButton, FormError, FormMessage } from './ui'
+import { usernameError, USERNAME_MAX, USERNAME_MIN } from '@/lib/username'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MIN_PASSWORD = 8
@@ -13,6 +14,7 @@ export default function AuthForm({ mode, next }: { mode: 'login' | 'signup'; nex
   const [state, formAction] = useActionState<AuthState, FormData>(action, {})
   const nextQuery = next ? `?next=${encodeURIComponent(next)}` : ''
 
+  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -23,7 +25,9 @@ export default function AuthForm({ mode, next }: { mode: 'login' | 'signup'; nex
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     if (mode !== 'signup') return
     let err: string | null = null
-    if (!EMAIL_RE.test(email)) err = 'Enter a valid email address.'
+    const badUsername = usernameError(username)
+    if (badUsername) err = badUsername
+    else if (!EMAIL_RE.test(email)) err = 'Enter a valid email address.'
     else if (password.length < MIN_PASSWORD)
       err = `Password must be at least ${MIN_PASSWORD} characters.`
     else if (password !== confirm) err = 'Passwords do not match.'
@@ -81,8 +85,11 @@ export default function AuthForm({ mode, next }: { mode: 'login' | 'signup'; nex
             label="Username"
             name="username"
             required
-            minLength={2}
+            minLength={USERNAME_MIN}
+            maxLength={USERNAME_MAX}
             autoComplete="username"
+            value={username}
+            onChange={e => setUsername(e.target.value)}
             placeholder="detective_you"
           />
         )}

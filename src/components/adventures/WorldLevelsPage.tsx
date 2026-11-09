@@ -3,6 +3,8 @@ import Field from '@/components/home/Field'
 import type { Adventure, WorldLevel } from '@/lib/types'
 import { SKILL_ABBR } from '@/lib/worlds'
 import { WORLD_CLEARANCE } from '@/lib/xp'
+import { ONE_TIME_PRICES, PLANS, formatInr } from '@/lib/billing/catalog'
+import CheckoutButton from '@/components/billing/CheckoutButton'
 
 interface Props {
   adventure: Adventure
@@ -11,13 +13,22 @@ interface Props {
   isAuthed?: boolean
   /** Levels 1..trialLevel are free to play without an account. From the server. */
   trialLevel?: number
+  /** Levels this player can open now (free trial + owned). From the server. */
+  openLevelIds?: number[]
+  /** Owns every level of this world (bought it, or holds Pro/Career). */
+  ownsWorld?: boolean
+  hasPlan?: boolean
+  /** Arrived from an in-game "Unlock" prompt for this level. */
+  unlockLevel?: number | null
 }
 
-type Status = 'completed' | 'active' | 'locked'
+/** paid = beyond the free trial and not owned yet. */
+type Status = 'completed' | 'active' | 'paid' | 'locked'
 
 const STATE_LABEL: Record<Status, string> = {
   completed: '✓ cleared',
   active: '● open',
+  paid: '◌ locked',
   locked: '◌ locked',
 }
 
@@ -27,6 +38,10 @@ export default function WorldLevelsPage({
   completedLevelIds = [],
   isAuthed = false,
   trialLevel = 1,
+  openLevelIds = [],
+  ownsWorld = false,
+  hasPlan = false,
+  unlockLevel = null,
 }: Props) {
   // Completion is authoritative from the server — never localStorage.
   const completedIds = completedLevelIds
@@ -39,11 +54,12 @@ export default function WorldLevelsPage({
   const getStatus = (level: WorldLevel): Status => {
     if (!isPlayable) return 'locked'
     if (completedIds.includes(level.id)) return 'completed'
-    if (level.id <= trialLevel) return 'active' // free trial — always open
-    // Beyond the trial: must be signed in AND have finished the previous level.
-    if (!isAuthed) return 'locked'
-    return completedIds.includes(level.id - 1) ? 'active' : 'locked'
+    // Free trial levels and owned levels open straight away, in any order.
+    if (level.id <= trialLevel || openLevelIds.includes(level.id)) return 'active'
+    return 'paid'
   }
+  const hasPaidLevels = isPlayable && levels.some(l => getStatus(l) === 'paid')
+  const loginHref = `/login?next=${encodeURIComponent(`/adventures/${adventure.slug}`)}`
 
   const firstActiveLevel = levels.find(l => getStatus(l) === 'active')
   const playHref = `/adventures/${adventure.slug}/play`
@@ -132,7 +148,16 @@ export default function WorldLevelsPage({
                       <p className="sq-level__desc">{level.description}</p>
                     </div>
                     <div className="sq-level__side">
-                      <span className="sq-level__state">{STATE_LABEL[status]}</span>
+                      {status === 'paid' && isAuthed ? (
+                        <CheckoutButton
+                          item={{ kind: 'level', adventureId: adventure.slug, level: level.id }}
+                          label={`unlock ${formatInr(ONE_TIME_PRICES.level)}`}
+                          className="sq-unlock"
+                          successHref={`${playHref}?level=${level.id}`}
+                        />
+                      ) : (
+                        <span className="sq-level__state">{STATE_LABEL[status]}</span>
+                      )}
                       <span className="sq-level__xp sq-num">{level.xpReward} XP</span>
                       <span>{level.duration}</span>
                     </div>
@@ -141,20 +166,70 @@ export default function WorldLevelsPage({
               })}
             </ol>
 
-            {isPlayable && !isAuthed && (
-              <p className="sq-panel__empty" style={{ paddingInline: 0 }}>
-                # {trialLevel > 1 ? `levels 1–${trialLevel} are` : 'level 1 is'} free. <Link href={`/login?next=/adventures/${adventure.slug}`} className="sq-link">sign in</Link> to unlock the rest and keep your XP.
-              </p>
-            )}
           </section>
+
+          {hasPaidLevels && (
+            <section id="unlock" className="sq-panel sq-unlockbox" aria-labelledby="sq-unlock-h">
+              <div className="sq-panel__bar">
+                <h2 id="sq-unlock-h" className="sq-panel__h">
+                  {unlockLevel ? `Unlock level ${unlockLevel}` : 'Unlock the rest'}
+                </h2>
+                <span className="sq-panel__r">
+                  {trialLevel > 1 ? `levels 1–${trialLevel}` : 'level 1'} free
+                </span>
+              </div>
+              {!isAuthed ? (
+                <p className="sq-panel__body sq-unlockbox__note">
+                  <Link href={loginHref} className="sq-link">Sign in</Link> to unlock more levels and keep your XP.
+                  Plans and prices are on the <Link href="/pricing" className="sq-link">pricing page</Link>.
+                </p>
+              ) : (
+                <div className="sq-unlockbox__opts">
+                  {unlockLevel && (
+                    <div className="sq-unlockbox__opt">
+                      <b>Just level {unlockLevel}</b>
+                      <span>{formatInr(ONE_TIME_PRICES.level)} once</span>
+                      <CheckoutButton
+                        item={{ kind: 'level', adventureId: adventure.slug, level: unlockLevel }}
+                        label="unlock level"
+                        className="sq-btn sq-btn--ghost"
+                        successHref={`${playHref}?level=${unlockLevel}`}
+                      />
+                    </div>
+                  )}
+                  {!ownsWorld && (
+                    <div className="sq-unlockbox__opt">
+                      <b>All of {adventure.title}</b>
+                      <span>{formatInr(ONE_TIME_PRICES.world)} once · every level, yours to keep</span>
+                      <CheckoutButton
+                        item={{ kind: 'world', adventureId: adventure.slug }}
+                        label="unlock world"
+                        className={unlockLevel ? 'sq-btn sq-btn--ghost' : 'sq-btn'}
+                      />
+                    </div>
+                  )}
+                  {!hasPlan && (
+                    <div className="sq-unlockbox__opt">
+                      <b>{PLANS.pro.name}: every world</b>
+                      <span>{formatInr(PLANS.pro.amount)}/month · cancel any time</span>
+                      <Link href="/pricing" className="sq-btn sq-btn--ghost">
+                        <span className="sq-btn__fill" aria-hidden="true" />
+                        see plans
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
 
           {!isPlayable && (
             <div className="sq-empty">
               <span><b>status:</b> this world is still being built</span>
               <span>Boot a live one in the meantime.</span>
-              <Link href="/adventures/sql-murder-mystery" className="sq-btn sq-btn--ghost">
+              <Link href="/adventures/linux-prison-break" className="sq-btn sq-btn--ghost">
                 <span className="sq-btn__fill" aria-hidden="true" />
-                run sql-murder-mystery
+                run linux-prison-break
                 <span className="sq-arrow" aria-hidden="true">→</span>
               </Link>
             </div>

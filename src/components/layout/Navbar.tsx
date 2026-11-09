@@ -10,6 +10,8 @@ const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/adventures', label: 'Quests' },
   { href: '/#how-it-works', label: 'How it works' },
+  { href: '/challenges', label: 'Challenges' },
+  { href: '/pricing', label: 'Pricing' },
   { href: '/dashboard', label: 'Dashboard' },
 ]
 
@@ -23,6 +25,8 @@ function matchActive(href: string, pathname: string) {
   if (href === '/') return pathname === '/'
   if (href === '/adventures') return pathname === '/adventures' || pathname.startsWith('/adventures/')
   if (href === '/dashboard') return pathname.startsWith('/dashboard')
+  if (href === '/pricing') return pathname === '/pricing'
+  if (href === '/challenges') return pathname.startsWith('/challenges')
   return false
 }
 

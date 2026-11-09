@@ -6,6 +6,7 @@ import Footer from '@/components/layout/Footer'
 import AuthProvider from '@/components/auth/AuthProvider'
 import { getUser, getProfile } from '@/lib/db/queries'
 import { clearanceForXp } from '@/lib/xp'
+import { displayNameFor } from '@/lib/display-name'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://unrust.app'),
@@ -14,14 +15,14 @@ export const metadata: Metadata = {
     template: '%s · unrust',
   },
   description:
-    'Learn real tech by operating real systems. Solve a murder in SQL, break out of a Linux prison, fix a timeline with Git. You run the commands, the skill sticks.',
+    'Learn real tech by operating real systems. Break out of a Linux prison, crack a case in SQL, fix a timeline with Git. You run the commands, the skill sticks.',
   keywords: ['learn SQL', 'learn Linux', 'learn Git', 'interactive coding', 'terminal game', 'learn by doing', 'unrust'],
   alternates: { canonical: './' },
   openGraph: {
     type: 'website',
     siteName: 'unrust',
     title: 'unrust: learn by operating real systems',
-    description: 'Solve a murder in SQL. Break out of a Linux prison. You operate real systems to learn.',
+    description: 'Break out of a Linux prison. Crack a case in SQL. You operate real systems to learn.',
     images: ['/og.png'],
   },
   twitter: { card: 'summary_large_image' },
@@ -41,7 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const navUser =
     user && profile
       ? {
-          displayName: profile.display_name || profile.username,
+          displayName: displayNameFor(profile),
           xp: profile.xp,
           clearance: clearanceForXp(profile.xp).current.title,
         }

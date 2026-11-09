@@ -2,13 +2,15 @@ import Link from 'next/link'
 
 const columns = {
   Worlds: [
-    { label: 'SQL Murder Mystery', href: '/adventures/sql-murder-mystery' },
     { label: 'Linux Prison Break', href: '/adventures/linux-prison-break' },
+    { label: 'SQL Detective', href: '/adventures/sql-murder-mystery' },
     { label: 'All quests', href: '/adventures' },
   ],
   Platform: [
     { label: 'How it works', href: '/#how-it-works' },
     { label: 'Leaderboard', href: '/#community' },
+    { label: 'Challenges', href: '/challenges' },
+    { label: 'Pricing', href: '/pricing' },
     { label: 'Dashboard', href: '/dashboard' },
   ],
 }

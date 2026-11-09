@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { supabaseConfigured } from '@/lib/supabase/env'
 import { createAdminClient, serviceConfigured } from '@/lib/supabase/admin'
 import { safeNext } from '@/lib/safe-next'
+import { usernameError } from '@/lib/username'
 
 function siteUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
@@ -21,16 +22,16 @@ const NOT_CONFIGURED =
  * trigger normally creates this on sign-up; this is an idempotent fallback that
  * mirrors the trigger's username scheme, so it's a no-op if the trigger ran.
  */
-async function ensureProfile(userId: string, username: string, email: string) {
+async function ensureProfile(userId: string, username: string) {
   if (!serviceConfigured) return
-  const base = (username || email.split('@')[0] || 'quester').trim() || 'quester'
   const admin = createAdminClient()
   await admin.from('profiles').upsert(
     {
       id: userId,
-      username: `${base}_${userId.slice(0, 4)}`,
-      display_name: username || base,
-      avatar: base.slice(0, 2).toUpperCase(),
+      username: `${username}_${userId.slice(0, 4)}`,
+      display_name: username,
+      avatar: username.slice(0, 2).toUpperCase(),
+      username_set: true,
     },
     { onConflict: 'id', ignoreDuplicates: true },
   )
@@ -56,8 +57,10 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   if (!supabaseConfigured) return { error: NOT_CONFIGURED }
   const email = String(formData.get('email') ?? '').trim()
   const password = String(formData.get('password') ?? '')
-  const username = String(formData.get('username') ?? '').trim().slice(0, 32)
+  const username = String(formData.get('username') ?? '').trim()
   const next = safeNext(formData.get('next'))
+  const badUsername = usernameError(username)
+  if (badUsername) return { error: badUsername }
   if (password.length < 8) return { error: 'Password must be at least 8 characters.' }
 
   const supabase = await createClient()
@@ -72,7 +75,7 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   if (error) return { error: error.message }
 
   // Persist their profile so progress/actions can be stored for this account.
-  if (data.user) await ensureProfile(data.user.id, username, email)
+  if (data.user) await ensureProfile(data.user.id, username)
 
   // Email confirmation disabled → Supabase returned a session and set the auth
   // cookie, so they're already signed in. Send them straight on.
@@ -83,10 +86,46 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
 
   // Confirmation required → account is created but they must verify via email.
   return {
-    message:
-      'Account created! Check your email to confirm, then sign in. ' +
-      '(If email confirmation is disabled in Supabase, just sign in now.)',
+    message: `Account created. We sent a confirmation link to ${email} — open it to activate your account.`,
   }
+}
+
+/**
+ * /welcome picker: sets the username for a signed-in player who doesn't have
+ * one yet (OAuth sign-ups, or accounts created before usernames were enforced).
+ * Middleware keeps them on /welcome until profiles.username_set is true.
+ */
+export async function chooseUsername(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  if (!supabaseConfigured || !serviceConfigured) return { error: NOT_CONFIGURED }
+  const username = String(formData.get('username') ?? '').trim()
+  const next = safeNext(formData.get('next'))
+  const badUsername = usernameError(username)
+  if (badUsername) return { error: badUsername }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect('/login?next=/welcome')
+
+  const admin = createAdminClient()
+  const { error } = await admin.from('profiles').upsert(
+    {
+      id: user.id,
+      username: `${username}_${user.id.slice(0, 4)}`,
+      display_name: username,
+      avatar: username.slice(0, 2).toUpperCase(),
+      username_set: true,
+    },
+    { onConflict: 'id' },
+  )
+  if (error) {
+    if (error.code === '23505') return { error: 'That username is taken. Try another.' }
+    return { error: 'Could not save your username. Try again.' }
+  }
+
+  revalidatePath('/', 'layout')
+  redirect(next)
 }
 
 export async function signInWithOAuth(provider: 'google' | 'github', rawNext = '/dashboard') {

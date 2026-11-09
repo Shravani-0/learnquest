@@ -36,7 +36,10 @@ they're set, so gameplay stays fully playable anonymously.
 Open the **SQL Editor** in the Supabase dashboard and run, in order:
 [`0001_init.sql`](supabase/migrations/0001_init.sql), then
 [`0002_secure_progress.sql`](supabase/migrations/0002_secure_progress.sql), then
-[`0003_anti_cheat.sql`](supabase/migrations/0003_anti_cheat.sql).
+[`0003_anti_cheat.sql`](supabase/migrations/0003_anti_cheat.sql), then
+[`0004_blank_username.sql`](supabase/migrations/0004_blank_username.sql), then
+[`0005_billing.sql`](supabase/migrations/0005_billing.sql), then
+[`0006_challenges.sql`](supabase/migrations/0006_challenges.sql).
 
 `0001` creates the tables, the `leaderboard` view, RLS policies, and the sign-up
 trigger. `0002` hardens everything: it removes the client-callable `award_xp()`
@@ -51,8 +54,9 @@ stops publishing other players' in-progress rows. (The app falls back to a
 non-atomic path until 0003 is applied, so apply it.)
 
 **Anti-cheat rules enforced in `src/app/adventures/actions.ts`:**
-- Hint text is never in the page; each clue comes from `revealSqlHint` /
-  `revealLinuxHint`, which records it. XP uses the server's hint count.
+- XP uses the server's own hint count. Linux hint opens are recorded by
+  `revealLinuxHint`. The SQL game has no clues (Field Notes is the player's own
+  notepad, saved in their browser), so SQL solves always pay full XP.
 - A verdict only pays out once the server has detected the investigation step
   that points to that suspect (`requiredEvidence()`), and wrong accusations are
   capped at 5 per case per 15 minutes (no brute-forcing the `person` table).
@@ -84,7 +88,33 @@ In **Authentication → Providers**:
 - In **Authentication → URL Configuration**, add `http://localhost:3000/auth/callback`
   (and your production equivalent) to the redirect allow-list.
 
-## 5. Run
+## 5. Payments (Razorpay)
+
+Levels 1–2 of every world are free. Beyond that a player needs the level (₹49),
+its world (₹299), or a plan: Pro ₹499/mo (every world), Career ₹999/mo (Pro +
+interview levels) or Interview (interview levels only). Prices and which plans
+are on sale live in [`src/lib/billing/catalog.ts`](src/lib/billing/catalog.ts);
+Career and Interview are marked `available: false` until the interview levels
+ship. The Interview price there is a placeholder.
+
+1. In the Razorpay Dashboard (start in **Test mode**) copy the API key id and
+   secret into `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` (see `.env.local.example`).
+2. **Subscriptions → Plans**: create a monthly plan for Pro (₹499), Career (₹999)
+   and Interview, and put their `plan_…` ids in `RAZORPAY_PLAN_PRO` / `_CAREER` /
+   `_INTERVIEW`. The amounts you set there are what Razorpay charges each month,
+   so keep them equal to the catalog.
+3. **Webhooks**: add `https://<your-site>/api/razorpay/webhook` with a secret
+   (`RAZORPAY_WEBHOOK_SECRET`) and these events: `order.paid`, `payment.failed`,
+   `subscription.activated`, `subscription.charged`, `subscription.cancelled`,
+   `subscription.halted`, `subscription.completed`. Webhooks need a public URL;
+   for local testing use a tunnel (e.g. ngrok) or rely on the in-browser
+   confirmation, which grants the purchase too.
+4. Restart `npm run dev`.
+
+Without Razorpay keys the site still runs: paid levels show their unlock
+options, and pressing one says payments aren't set up yet.
+
+## 6. Run
 
 ```bash
 npm run dev

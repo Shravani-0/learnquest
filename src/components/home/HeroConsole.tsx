@@ -16,9 +16,9 @@ type Line = {
 }
 
 const HINTS = [
-  'run sql-murder-mystery',
-  'ls worlds',
   'run linux-prison-break',
+  'ls worlds',
+  'run sql-murder-mystery',
   'help',
   'whoami',
 ]
@@ -83,7 +83,7 @@ export default function HeroConsole({ session }: { session: HeroSession }) {
       if (verb === 'help') {
         push([
           line({ kind: 'out', text: 'ls worlds        list every system and its status', scramble: true }),
-          line({ kind: 'out', text: 'run <system>     boot a system (e.g. run sql-murder-mystery)', scramble: true }),
+          line({ kind: 'out', text: 'run <system>     boot a system (e.g. run linux-prison-break)', scramble: true }),
           line({ kind: 'out', text: 'whoami           show your clearance and XP', scramble: true }),
           line({ kind: 'out', text: 'clear            wipe the console', scramble: true }),
         ])
@@ -156,7 +156,7 @@ export default function HeroConsole({ session }: { session: HeroSession }) {
         </h1>
         <p className="sq-hero__tag">Learn by breaking in.</p>
         <p className="sq-hero__sub">
-          Solve a murder in SQL. Escape a prison in the shell. On unrust you run real commands
+          Escape a prison in the shell. Crack a case in SQL. On unrust you run real commands
           against real systems, and keep the skill after the story ends.
         </p>
         <div className="sq-hero__cta">
@@ -220,7 +220,7 @@ export default function HeroConsole({ session }: { session: HeroSession }) {
           </div>
 
           <div className="sq-term__chips">
-            {['help', 'ls worlds', 'run sql-murder-mystery', 'whoami'].map((c) => (
+            {['help', 'ls worlds', 'run linux-prison-break', 'whoami'].map((c) => (
               <button
                 key={c}
                 type="button"

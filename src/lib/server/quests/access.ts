@@ -4,6 +4,8 @@ import { getAdventureBySlug } from '@/lib/data/adventures'
 import { getUser } from '@/lib/db/queries'
 import { createAdminClient, serviceConfigured } from '@/lib/supabase/admin'
 import type { AccessReason } from '@/lib/quests/types'
+import { canPlayLevel, type Ownership } from '@/lib/billing/entitlements'
+import { getOwnership } from '@/lib/server/billing/store'
 
 /**
  * Server-side access control + progress persistence for the games.
@@ -11,8 +13,9 @@ import type { AccessReason } from '@/lib/quests/types'
  * Model (chosen with the product owner):
  *   • Levels 1–TRIAL_LEVEL of every world are a free TRIAL — playable without an
  *     account (nothing is persisted for anonymous players).
- *   • Levels beyond the trial require a signed-in user AND completion of the
- *     previous level.
+ *   • Levels beyond the trial require a signed-in user who owns them: the level
+ *     itself, its world, or a plan covering every world (see lib/billing). Owned
+ *     levels open straight away — earlier levels needn't be cleared first.
  *
  * `checkAccess()` is the one gate; both the play routes and the server actions
  * call it, so a locked level can't be reached by URL or by calling the action
@@ -35,23 +38,6 @@ export interface Access {
   userId: string | null
 }
 
-export async function isLevelCompleted(
-  userId: string,
-  adventureId: string,
-  levelNumber: number,
-): Promise<boolean> {
-  if (!serviceConfigured) return false
-  const db = createAdminClient()
-  const { data } = await db
-    .from('user_quest_progress')
-    .select('status')
-    .eq('user_id', userId)
-    .eq('adventure_id', adventureId)
-    .eq('level_number', levelNumber)
-    .maybeSingle()
-  return data?.status === 'completed'
-}
-
 export async function completedLevels(userId: string | null, adventureId: string): Promise<number[]> {
   if (!userId || !serviceConfigured) return []
   const db = createAdminClient()
@@ -63,46 +49,61 @@ export async function completedLevels(userId: string | null, adventureId: string
   return (data ?? []).filter(r => r.status === 'completed').map(r => r.level_number)
 }
 
-/** Highest level the player may access right now (sequential unlock from the trial). */
-export async function unlockedMax(
+/** Every level of a world this player can open right now (free trial + owned). */
+export async function accessibleLevels(
   userId: string | null,
   adventureId: string,
   count: number,
-): Promise<number> {
-  if (!userId || !serviceConfigured) return TRIAL_LEVEL
-  const done = new Set(await completedLevels(userId, adventureId))
-  let max = TRIAL_LEVEL
-  for (let n = TRIAL_LEVEL + 1; n <= count; n++) {
-    if (done.has(n - 1)) max = n
-    else break
+  ownership?: Ownership,
+): Promise<number[]> {
+  const owned = userId ? (ownership ?? (await getOwnership(userId))) : null
+  const out: number[] = []
+  for (let n = 1; n <= count; n++) {
+    if (n <= TRIAL_LEVEL || (owned && canPlayLevel(owned, adventureId, n, TRIAL_LEVEL))) out.push(n)
   }
-  return max
+  return out
 }
 
 /**
- * Where to drop a player in: the first accessible level they haven't cleared,
- * so fresh/anonymous players always start at level 1 rather than being skipped
- * ahead to the top of the free trial. Falls back to the highest accessible level
- * once everything reachable is done.
+ * Where to drop a player in: the first level they can open and haven't cleared,
+ * so fresh/anonymous players start at level 1. Once everything they can open is
+ * cleared, the last of those (a replay).
  */
 export async function resumeLevel(
   userId: string | null,
   adventureId: string,
   count: number,
 ): Promise<number> {
-  if (!userId || !serviceConfigured) return 1
+  const open = await accessibleLevels(userId, adventureId, count)
   const done = new Set(await completedLevels(userId, adventureId))
+  return open.find(n => !done.has(n)) ?? open[open.length - 1] ?? 1
+}
 
-  // Highest level currently accessible (trial + sequential unlock).
-  let max = TRIAL_LEVEL
-  for (let n = TRIAL_LEVEL + 1; n <= count; n++) {
-    if (done.has(n - 1)) max = n
-    else break
-  }
+/** Can this player open this level? Same rule as checkAccess, without the world checks. */
+export async function canOpenLevel(userId: string | null, adventureId: string, level: number): Promise<boolean> {
+  if (level <= TRIAL_LEVEL) return true
+  if (!userId) return false
+  return canPlayLevel(await getOwnership(userId), adventureId, level, TRIAL_LEVEL)
+}
 
-  // First not-yet-cleared level within reach; else resume at the top.
-  for (let n = 1; n <= max; n++) if (!done.has(n)) return n
-  return max
+/**
+ * Which level a play page should open. An explicit ?level= is honoured when the
+ * player can open it; otherwise anonymous players go to login, and signed-in
+ * players go to the world page to unlock it. No ?level= → resume.
+ */
+export async function resolvePlayLevel(
+  userId: string | null,
+  adventureId: string,
+  count: number,
+  requested: string | undefined,
+): Promise<{ level: number } | { redirect: string }> {
+  const raw = parseInt(requested ?? '', 10)
+  if (Number.isNaN(raw)) return { level: await resumeLevel(userId, adventureId, count) }
+  const level = Math.max(1, Math.min(count, raw))
+  if (await canOpenLevel(userId, adventureId, level)) return { level }
+  const playUrl = `/adventures/${adventureId}/play?level=${level}`
+  if (!userId) return { redirect: `/login?next=${encodeURIComponent(playUrl)}` }
+  return { redirect: `/adventures/${adventureId}?unlock=${level}#unlock` }
 }
 
 /** The single access gate for a specific level. */
@@ -117,8 +118,9 @@ export async function checkAccess(adventureId: string, level: number): Promise<A
 
   if (!userId) return { ok: false, reason: 'auth_required', userId: null }
 
-  const priorDone = await isLevelCompleted(userId, adventureId, level - 1)
-  if (!priorDone) return { ok: false, reason: 'locked', userId }
+  if (!(await canOpenLevel(userId, adventureId, level))) {
+    return { ok: false, reason: 'payment_required', userId }
+  }
 
   return { ok: true, userId }
 }

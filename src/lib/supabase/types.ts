@@ -26,6 +26,7 @@ export interface Database {
           xp: number
           streak: number
           last_active: string | null
+          username_set: boolean
           created_at: string
         }
         Insert: {
@@ -36,6 +37,7 @@ export interface Database {
           xp?: number
           streak?: number
           last_active?: string | null
+          username_set?: boolean
           created_at?: string
         }
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>
@@ -213,6 +215,122 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['user_answers']['Insert']>
         Relationships: []
       }
+      payments: {
+        Row: {
+          id: string
+          user_id: string
+          kind: 'level' | 'world' | 'plan'
+          adventure_id: string | null
+          level_number: number | null
+          plan: 'pro' | 'career' | 'interview' | null
+          amount: number
+          currency: string
+          razorpay_order_id: string | null
+          razorpay_subscription_id: string | null
+          razorpay_payment_id: string | null
+          status: 'created' | 'paid' | 'failed' | 'cancelled'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          kind: 'level' | 'world' | 'plan'
+          adventure_id?: string | null
+          level_number?: number | null
+          plan?: 'pro' | 'career' | 'interview' | null
+          amount: number
+          currency?: string
+          razorpay_order_id?: string | null
+          razorpay_subscription_id?: string | null
+          razorpay_payment_id?: string | null
+          status?: 'created' | 'paid' | 'failed' | 'cancelled'
+        }
+        Update: Partial<Database['public']['Tables']['payments']['Insert']>
+        Relationships: []
+      }
+      entitlements: {
+        Row: {
+          id: string
+          user_id: string
+          kind: 'level' | 'world' | 'plan'
+          adventure_id: string | null
+          level_number: number | null
+          plan: 'pro' | 'career' | 'interview' | null
+          status: 'active' | 'cancelled' | 'expired'
+          expires_at: string | null
+          source: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          kind: 'level' | 'world' | 'plan'
+          adventure_id?: string | null
+          level_number?: number | null
+          plan?: 'pro' | 'career' | 'interview' | null
+          status?: 'active' | 'cancelled' | 'expired'
+          expires_at?: string | null
+          source: string
+        }
+        Update: Partial<Database['public']['Tables']['entitlements']['Insert']>
+        Relationships: []
+      }
+      challenges: {
+        Row: {
+          id: string
+          code: string
+          challenger_id: string
+          opponent_id: string | null
+          skill: 'sql' | 'linux'
+          puzzle_id: string | null
+          status: 'open' | 'active' | 'finished' | 'expired'
+          winner_id: string | null
+          result_reason: string | null
+          created_at: string
+          invite_expires_at: string
+          accepted_at: string | null
+          deadline_at: string | null
+          finished_at: string | null
+        }
+        Insert: {
+          code: string
+          challenger_id: string
+          skill: 'sql' | 'linux'
+          invite_expires_at: string
+          opponent_id?: string | null
+          puzzle_id?: string | null
+          status?: 'open' | 'active' | 'finished' | 'expired'
+          winner_id?: string | null
+          result_reason?: string | null
+          accepted_at?: string | null
+          deadline_at?: string | null
+          finished_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['challenges']['Insert']>
+        Relationships: []
+      }
+      challenge_runs: {
+        Row: {
+          challenge_id: string
+          user_id: string
+          started_at: string
+          finished_at: string | null
+          solved: boolean
+          gave_up: boolean
+          moves: number
+        }
+        Insert: {
+          challenge_id: string
+          user_id: string
+          started_at?: string
+          finished_at?: string | null
+          solved?: boolean
+          gave_up?: boolean
+          moves?: number
+        }
+        Update: Partial<Database['public']['Tables']['challenge_runs']['Insert']>
+        Relationships: []
+      }
     }
     Views: {
       leaderboard: {
@@ -253,6 +371,10 @@ export interface Database {
       }
       // Server-only (service role): atomically append detected steps / revealed
       // hint keys ('hint:*') to a level's progress; hints_used = count of hint keys.
+      bump_challenge_moves: {
+        Args: { p_challenge: string; p_user: string }
+        Returns: number
+      }
       append_progress_keys: {
         Args: {
           p_user: string
