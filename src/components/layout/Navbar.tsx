@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { signOut } from '@/app/auth/actions'
+import LogoMark from '@/components/brand/LogoMark'
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -38,8 +39,7 @@ export default function Navbar({ user }: { user: NavUser | null }) {
     <header className="sq-nav">
       <div className="sq-nav__in">
         <Link href="/" className="sq-brand" aria-label="unrust home">
-          <span className="sq-brand__mark" aria-hidden="true">▸</span>
-          <span>un<b>rust</b></span>
+          <LogoMark size={26} className="sq-brand__mark" />
         </Link>
 
         <nav className="sq-nav__links" aria-label="Primary">

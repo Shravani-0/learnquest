@@ -858,8 +858,7 @@ html.lenis, html.lenis body { height: auto; }
   font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 1.05rem;
   letter-spacing: -0.01em; color: var(--c-ink);
 }
-.sq-brand__mark { color: var(--c-accent); font-family: var(--font-mono), monospace; display: inline-block; transition: translate 0.3s cubic-bezier(0.16,1,0.3,1); }
-@media (hover: hover) { .sq-brand:hover .sq-brand__mark { translate: 4px 0; } }
+.sq-brand__mark { display: block; flex: none; }
 .sq-brand b { color: var(--c-accent); font-weight: 700; }
 .sq-nav__links { display: flex; align-items: center; gap: 1.4rem; font-size: var(--t-s); }
 .sq-nav__link { color: var(--c-muted); padding-block: 0.2rem; }
