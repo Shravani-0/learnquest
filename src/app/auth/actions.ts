@@ -13,8 +13,20 @@ function siteUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 }
 
-const NOT_CONFIGURED =
-  'Supabase is not configured yet. Add your credentials to .env.local and restart.'
+/**
+ * Shown to players when auth can't run because the deployment is missing its
+ * Supabase env vars. The setup detail goes to the server log, never the page.
+ * (Production builds refuse to run without them — see next.config.ts.)
+ */
+const NOT_CONFIGURED = 'Accounts are unavailable right now. Please try again in a little while.'
+
+function unavailable(): AuthState {
+  console.error(
+    '[auth] Supabase is not configured: set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY and ' +
+      'SUPABASE_SERVICE_ROLE_KEY in the hosting environment, then rebuild.',
+  )
+  return { error: NOT_CONFIGURED }
+}
 
 /**
  * Guarantee a profiles row exists for a new user so their XP/progress/answers
@@ -40,7 +52,7 @@ async function ensureProfile(userId: string, username: string) {
 export type AuthState = { error?: string; message?: string }
 
 export async function signIn(_prev: AuthState, formData: FormData): Promise<AuthState> {
-  if (!supabaseConfigured) return { error: NOT_CONFIGURED }
+  if (!supabaseConfigured) return unavailable()
   const email = String(formData.get('email') ?? '')
   const password = String(formData.get('password') ?? '')
   const next = safeNext(formData.get('next'))
@@ -54,7 +66,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
 }
 
 export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
-  if (!supabaseConfigured) return { error: NOT_CONFIGURED }
+  if (!supabaseConfigured) return unavailable()
   const email = String(formData.get('email') ?? '').trim()
   const password = String(formData.get('password') ?? '')
   const username = String(formData.get('username') ?? '').trim()
@@ -96,7 +108,7 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
  * Middleware keeps them on /welcome until profiles.username_set is true.
  */
 export async function chooseUsername(_prev: AuthState, formData: FormData): Promise<AuthState> {
-  if (!supabaseConfigured || !serviceConfigured) return { error: NOT_CONFIGURED }
+  if (!supabaseConfigured || !serviceConfigured) return unavailable()
   const username = String(formData.get('username') ?? '').trim()
   const next = safeNext(formData.get('next'))
   const badUsername = usernameError(username)
@@ -151,7 +163,7 @@ export async function requestPasswordReset(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
-  if (!supabaseConfigured) return { error: NOT_CONFIGURED }
+  if (!supabaseConfigured) return unavailable()
   const email = String(formData.get('email') ?? '').trim()
   if (!email) return { error: 'Enter your email address.' }
 
@@ -174,7 +186,7 @@ export async function updatePassword(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
-  if (!supabaseConfigured) return { error: NOT_CONFIGURED }
+  if (!supabaseConfigured) return unavailable()
   const password = String(formData.get('password') ?? '')
   const confirm = String(formData.get('confirm') ?? '')
   if (password.length < 8) return { error: 'Password must be at least 8 characters.' }

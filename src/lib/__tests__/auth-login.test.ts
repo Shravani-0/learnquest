@@ -85,11 +85,22 @@ describe('user login (signIn)', () => {
     expect(res.state).toEqual({ error: 'Invalid login credentials' })
   })
 
-  it('reports a configuration error instead of calling Supabase when it is not set up', async () => {
+  it('shows players a plain "unavailable" message, never setup instructions, when Supabase is missing', async () => {
     state.configured = false
-    const res = await run(signIn({}, form({ email: 'a@b.co', password: 'x' })))
-    expect(res.state?.error).toMatch(/not configured/i)
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const action of [
+      signIn({}, form({ email: 'a@b.co', password: 'x' })),
+      signUp({}, form({ email: 'a@b.co', password: 'longenough1', username: 'sherlock' })),
+    ]) {
+      const res = await run(action)
+      expect(res.state?.error).toBe('Accounts are unavailable right now. Please try again in a little while.')
+      expect(res.state?.error).not.toMatch(/supabase|\.env|configur|credential/i)
+    }
     expect(state.db.client.auth.signInWithPassword).not.toHaveBeenCalled()
+    expect(state.db.client.auth.signUp).not.toHaveBeenCalled()
+    // The setup detail goes to the server log for the developer instead.
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('NEXT_PUBLIC_SUPABASE_URL'))
+    log.mockRestore()
   })
 })
 
