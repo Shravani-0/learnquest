@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
+import { supabaseConfigured } from '@/lib/supabase/env'
 
 type AuthContextValue = {
   user: User | null
@@ -37,6 +38,12 @@ export default function AuthProvider({
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Without Supabase env vars there is no auth to track. Creating the client
+    // would throw and take the whole page down, so stay signed-out instead.
+    if (!supabaseConfigured) {
+      setLoading(false)
+      return
+    }
     const supabase = createClient()
     let active = true
 
