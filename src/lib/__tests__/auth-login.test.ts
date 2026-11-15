@@ -26,7 +26,7 @@ vi.mock('next/navigation', async () => {
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }))
 
-import { signIn, signUp, chooseUsername } from '@/app/auth/actions'
+import { signIn, signUp, chooseUsername, resendConfirmation } from '@/app/auth/actions'
 import { updateSession } from '@/lib/supabase/middleware'
 import { safeNext } from '@/lib/safe-next'
 import { usernameError } from '@/lib/username'
@@ -145,6 +145,62 @@ describe('sign-up requires a valid username', () => {
     })
     // Email confirmation on → a message, no redirect, and it names the address.
     expect(res.state?.message).toContain('new@example.com')
+  })
+
+  it('tells an already-registered email to sign in (confirmation on: empty identities)', async () => {
+    state.db.client.auth.signUp.mockResolvedValueOnce({
+      data: { user: { id: 'fake-obfuscated-id', identities: [] }, session: null },
+      error: null,
+    })
+    const res = await run(signUp({}, form({ ...base, username: 'sherlock' })))
+    expect(res.state).toMatchObject({ alreadyRegistered: true, error: expect.stringMatching(/already have an account/) })
+    expect(state.admin.calls.find(c => c.method === 'upsert')).toBeUndefined()
+  })
+
+  it('tells an already-registered email to sign in (confirmation off: user_already_exists)', async () => {
+    state.db.client.auth.signUp.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: { message: 'User already registered', code: 'user_already_exists' },
+    })
+    const res = await run(signUp({}, form({ ...base, username: 'sherlock' })))
+    expect(res.state).toMatchObject({ alreadyRegistered: true, error: expect.stringMatching(/Sign in instead/) })
+  })
+
+  it('points the confirmation link at the site URL, not a hardcoded host', async () => {
+    await run(signUp({}, form({ ...base, username: 'sherlock' })))
+    const call = state.db.client.auth.signUp.mock.calls[0][0] as { options: { emailRedirectTo: string } }
+    expect(call.options.emailRedirectTo).toMatch(/\/auth\/callback\?next=/)
+  })
+})
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('unverified accounts can get a fresh link', () => {
+  it('flags an unconfirmed email on sign-in', async () => {
+    state.db.client.auth.signInWithPassword.mockResolvedValueOnce({
+      error: { message: 'Email not confirmed', code: 'email_not_confirmed' },
+    })
+    const res = await run(signIn({}, form({ email: 'a@b.co', password: 'longenough1' })))
+    expect(res.state).toMatchObject({ unconfirmed: true, error: expect.stringMatching(/not verified|isn’t verified/) })
+  })
+
+  it('re-sends the signup email with a callback link', async () => {
+    const res = await run(resendConfirmation({}, form({ email: 'a@b.co', next: '/dashboard' })))
+    const call = state.db.client.auth.resend.mock.calls[0][0] as { type: string; email: string; options: { emailRedirectTo: string } }
+    expect(call).toMatchObject({ type: 'signup', email: 'a@b.co' })
+    expect(call.options.emailRedirectTo).toMatch(/\/auth\/callback\?next=%2Fdashboard$/)
+    expect(res.state?.message).toMatch(/fresh link/)
+  })
+
+  it('asks for an email before sending', async () => {
+    const res = await run(resendConfirmation({}, form({ email: '' })))
+    expect(res.state?.error).toMatch(/email/)
+    expect(state.db.client.auth.resend).not.toHaveBeenCalled()
+  })
+
+  it('explains the rate limit instead of pretending it sent', async () => {
+    state.db.client.auth.resend.mockResolvedValueOnce({ error: { message: 'email rate limit exceeded', status: 429 } })
+    const res = await run(resendConfirmation({}, form({ email: 'a@b.co' })))
+    expect(res.state?.error).toMatch(/Too many emails/)
   })
 })
 

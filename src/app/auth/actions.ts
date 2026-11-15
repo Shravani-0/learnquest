@@ -14,6 +14,17 @@ function siteUrl() {
 }
 
 /**
+ * Base URL for links we email out. Prefer the origin the player is actually on
+ * (so a deploy never mails out a localhost link), falling back to SITE_URL.
+ * Supabase only honours it if it's in Auth → URL Configuration → Redirect URLs.
+ */
+async function requestOrigin() {
+  return (await headers()).get('origin') ?? siteUrl()
+}
+
+const ALREADY_REGISTERED = 'You already have an account with this email. Sign in instead.'
+
+/**
  * Shown to players when auth can't run because the deployment is missing its
  * Supabase env vars. The setup detail goes to the server log, never the page.
  * (Production builds refuse to run without them — see next.config.ts.)
@@ -49,7 +60,13 @@ async function ensureProfile(userId: string, username: string) {
   )
 }
 
-export type AuthState = { error?: string; message?: string }
+export type AuthState = {
+  error?: string
+  message?: string
+  alreadyRegistered?: boolean
+  /** Signed in with the right password but never clicked the verification link. */
+  unconfirmed?: boolean
+}
 
 export async function signIn(_prev: AuthState, formData: FormData): Promise<AuthState> {
   if (!supabaseConfigured) return unavailable()
@@ -59,7 +76,11 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
 
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
-  if (error) return { error: error.message }
+  if (error) {
+    if (error.code === 'email_not_confirmed')
+      return { error: 'Your email isn’t verified yet. Send yourself a fresh link below.', unconfirmed: true }
+    return { error: error.message }
+  }
 
   revalidatePath('/', 'layout')
   redirect(next)
@@ -80,11 +101,22 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
     email,
     password,
     options: {
-      emailRedirectTo: `${siteUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
+      emailRedirectTo: `${await requestOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
       data: { username, display_name: username },
     },
   })
-  if (error) return { error: error.message }
+  if (error) {
+    // Email confirmation disabled → Supabase rejects a duplicate outright.
+    if (error.code === 'user_already_exists' || /already registered/i.test(error.message))
+      return { error: ALREADY_REGISTERED, alreadyRegistered: true }
+    return { error: error.message }
+  }
+
+  // Email confirmation enabled → Supabase hides duplicates by returning a
+  // placeholder user with no identities (and sends no email). Its id is fake,
+  // so stop here before creating a profile for it.
+  if (data.user && data.user.identities?.length === 0)
+    return { error: ALREADY_REGISTERED, alreadyRegistered: true }
 
   // Persist their profile so progress/actions can be stored for this account.
   if (data.user) await ensureProfile(data.user.id, username)
@@ -100,6 +132,30 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   return {
     message: `Account created. We sent a confirmation link to ${email} — open it to activate your account.`,
   }
+}
+
+/**
+ * Re-send the sign-up verification email, e.g. after the original link expired.
+ * Reports success for unknown or already-verified emails too, so it can't be
+ * used to probe which addresses have accounts.
+ */
+export async function resendConfirmation(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  if (!supabaseConfigured) return unavailable()
+  const email = String(formData.get('email') ?? '').trim()
+  const next = safeNext(formData.get('next'))
+  if (!email) return { error: 'Enter your email address above first.' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo: `${await requestOrigin()}/auth/callback?next=${encodeURIComponent(next)}` },
+  })
+  if (error && (error.status === 429 || /rate limit|security purposes/i.test(error.message)))
+    return { error: 'Too many emails sent. Wait a few minutes, then try again.' }
+  if (error) console.error('[auth] resend confirmation failed:', error.message)
+
+  return { message: `If ${email} needs verifying, a fresh link is on its way. Check spam too.` }
 }
 
 /**
@@ -145,7 +201,7 @@ export async function signInWithOAuth(provider: 'google' | 'github', rawNext = '
   if (provider !== 'google' && provider !== 'github') return
   const next = safeNext(rawNext)
   const supabase = await createClient()
-  const origin = (await headers()).get('origin') ?? siteUrl()
+  const origin = await requestOrigin()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: { redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}` },
@@ -168,7 +224,7 @@ export async function requestPasswordReset(
   if (!email) return { error: 'Enter your email address.' }
 
   const supabase = await createClient()
-  const origin = (await headers()).get('origin') ?? siteUrl()
+  const origin = await requestOrigin()
   await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${origin}/auth/callback?next=/reset-password`,
   })

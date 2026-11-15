@@ -38,10 +38,11 @@ export function fakeSupabase(opts: {
     rpc: vi.fn(async (fn: string, _args?: unknown) => opts.rpc?.[fn] ?? { data: null, error: null }),
     auth: {
       getUser: vi.fn(async () => ({ data: { user: null as { id: string } | null } })),
-      signInWithPassword: vi.fn(async (_c: { email: string; password: string }) => ({ error: null as null | { message: string } })),
+      signInWithPassword: vi.fn(async (_c: { email: string; password: string }) => ({ error: null as null | { message: string; code?: string } })),
+      resend: vi.fn(async (_c: unknown) => ({ error: null as null | { message: string; status?: number } })),
       signUp: vi.fn(async (_c: unknown) => ({
-        data: { user: null as { id: string } | null, session: null as unknown },
-        error: null as null | { message: string },
+        data: { user: null as { id: string; identities?: unknown[] } | null, session: null as unknown },
+        error: null as null | { message: string; code?: string },
       })),
       signOut: vi.fn(async () => ({ error: null })),
     },

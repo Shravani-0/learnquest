@@ -2,16 +2,26 @@
 
 import { useActionState, useState } from 'react'
 import Link from 'next/link'
-import { signIn, signUp, signInWithOAuth, type AuthState } from '@/app/auth/actions'
+import { signIn, signUp, signInWithOAuth, resendConfirmation, type AuthState } from '@/app/auth/actions'
 import { AuthShell, AuthField, SubmitButton, FormError, FormMessage } from './ui'
 import { usernameError, USERNAME_MAX, USERNAME_MIN } from '@/lib/username'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MIN_PASSWORD = 8
 
-export default function AuthForm({ mode, next }: { mode: 'login' | 'signup'; next?: string }) {
+export default function AuthForm({
+  mode,
+  next,
+  linkExpired,
+}: {
+  mode: 'login' | 'signup'
+  next?: string
+  /** Arrived from /auth/callback with an expired or already-used email link. */
+  linkExpired?: boolean
+}) {
   const action = mode === 'login' ? signIn : signUp
   const [state, formAction] = useActionState<AuthState, FormData>(action, {})
+  const [resendState, resendAction, resending] = useActionState<AuthState, FormData>(resendConfirmation, {})
   const nextQuery = next ? `?next=${encodeURIComponent(next)}` : ''
 
   const [username, setUsername] = useState('')
@@ -137,12 +147,42 @@ export default function AuthForm({ mode, next }: { mode: 'login' | 'signup'; nex
           </Link>
         )}
 
+        {linkExpired && !state.error && !state.message && (
+          <FormError>
+            That link has expired or was already used. Sign in below, or enter your email and request a fresh
+            verification link.
+          </FormError>
+        )}
         {clientError && <FormError>{clientError}</FormError>}
-        {state.error && <FormError>{state.error}</FormError>}
+        {state.error && (
+          <FormError>
+            {state.error}
+            {state.alreadyRegistered && (
+              <>
+                {' '}
+                <Link href={`/login${nextQuery}`} className="sq-link">sign in →</Link>
+              </>
+            )}
+          </FormError>
+        )}
         {state.message && <FormMessage>{state.message}</FormMessage>}
 
         <SubmitButton label={mode === 'login' ? 'sign in' : 'create account'} />
       </form>
+
+      {/* Fresh verification link — its own form, since forms can't nest. */}
+      {(linkExpired || state.unconfirmed || state.alreadyRegistered) && (
+        <form action={resendAction} className="sq-stack" style={{ gap: '0.6rem', marginTop: '0.9rem' }}>
+          <input type="hidden" name="email" value={email} />
+          <input type="hidden" name="next" value={next ?? '/dashboard'} />
+          <button type="submit" disabled={resending} className="sq-btn sq-btn--ghost">
+            <span className="sq-btn__fill" aria-hidden="true" />
+            {resending ? 'sending…' : 'resend verification link'}
+          </button>
+          {resendState.error && <FormError>{resendState.error}</FormError>}
+          {resendState.message && <FormMessage>{resendState.message}</FormMessage>}
+        </form>
+      )}
     </AuthShell>
   )
 }
