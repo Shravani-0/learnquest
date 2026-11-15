@@ -3,6 +3,7 @@ import './globals.css'
 import { sans, display, mono, brand } from './fonts'
 import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
+import MobileTabBar from '@/components/layout/MobileTabBar'
 import AuthProvider from '@/components/auth/AuthProvider'
 import { getUser, getProfile } from '@/lib/db/queries'
 import { clearanceForXp } from '@/lib/xp'
@@ -61,6 +62,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {children}
           </main>
           <Footer />
+          <MobileTabBar />
         </AuthProvider>
       </body>
     </html>

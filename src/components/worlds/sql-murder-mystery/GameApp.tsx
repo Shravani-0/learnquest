@@ -87,6 +87,9 @@ export function GameApp({ content, level, count, isAuthed, nextOpen = false }: G
 
   const handleTablePick = useCallback((table: string) => {
     setQuery(`SELECT * FROM ${table}\nLIMIT 5`)
+    // On phones the schema sits below the console; bring the query into view.
+    if (window.matchMedia('(max-width: 1023px)').matches)
+      document.getElementById('sql-console')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
   // A solved case: show the XP, then either point at the next case or explain
@@ -229,32 +232,42 @@ export function GameApp({ content, level, count, isAuthed, nextOpen = false }: G
       {/* ── 2-column workspace ── */}
       <div className="max-w-[1500px] mx-auto px-4 sm:px-5 py-4 sm:py-5 pb-16">
         <div className="grid gap-4 items-start grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
-          {/* Left: Mission Brief + Hints (sticky on desktop, stacked on top on phones) */}
-          <div className="flex flex-col gap-4 min-w-0 lg:sticky lg:top-[9rem]">
-            <MissionBrief intro={content.intro} hasMastermind={content.hasMastermind} />
-            <FieldNotes level={level} />
+          {/* Left: Mission Brief + Hints (sticky on desktop). On phones both columns
+              flatten (`contents`) so `order-*` can put the console right after the
+              brief: brief → console → verdict → schema → notes. */}
+          <div className="contents lg:flex lg:flex-col gap-4 min-w-0 lg:sticky lg:top-[9rem]">
+            <div className="order-1 lg:order-none min-w-0">
+              <MissionBrief intro={content.intro} hasMastermind={content.hasMastermind} />
+            </div>
+            <div className="order-6 lg:order-none min-w-0">
+              <FieldNotes level={level} />
+            </div>
           </div>
 
           {/* Right: Schema ERD + Console + Verdict (stacked) */}
-          <div className="flex flex-col gap-4 min-w-0">
-            <SchemaMap
-              schema={content.schema}
-              relationships={content.schemaRelationships}
-              onTablePick={handleTablePick}
-            />
+          <div className="contents lg:flex lg:flex-col gap-4 min-w-0">
+            <div className="order-5 lg:order-none min-w-0">
+              <SchemaMap
+                schema={content.schema}
+                relationships={content.schemaRelationships}
+                onTablePick={handleTablePick}
+              />
+            </div>
 
-            <SqlConsole
-              query={query}
-              result={result}
-              isRunning={isRunning}
-              queryHistory={queryHistory}
-              onQueryChange={setQuery}
-              onRun={runQuery}
-            />
+            <div id="sql-console" className="order-2 lg:order-none min-w-0 scroll-mt-20">
+              <SqlConsole
+                query={query}
+                result={result}
+                isRunning={isRunning}
+                queryHistory={queryHistory}
+                onQueryChange={setQuery}
+                onRun={runQuery}
+              />
+            </div>
 
             {needSignIn && (
               <div
-                className="flex flex-wrap items-center gap-3 rounded-none px-4 py-3"
+                className="order-3 lg:order-none flex flex-wrap items-center gap-3 rounded-none px-4 py-3"
                 style={{ background: 'rgb(var(--accent-rgb) / 0.08)', border: '1px solid rgb(var(--accent-rgb) / 0.4)' }}
               >
                 <Lock className="w-4 h-4 shrink-0" style={{ color: 'var(--c-accent)' }} />
@@ -272,7 +285,7 @@ export function GameApp({ content, level, count, isAuthed, nextOpen = false }: G
 
             {needUnlock && (
               <div
-                className="flex flex-wrap items-center gap-3 rounded-none px-4 py-3"
+                className="order-3 lg:order-none flex flex-wrap items-center gap-3 rounded-none px-4 py-3"
                 style={{ background: 'rgb(var(--accent-rgb) / 0.08)', border: '1px solid rgb(var(--accent-rgb) / 0.4)' }}
               >
                 <Lock className="w-4 h-4 shrink-0" style={{ color: 'var(--c-accent)' }} />
@@ -288,13 +301,15 @@ export function GameApp({ content, level, count, isAuthed, nextOpen = false }: G
               </div>
             )}
 
-            <VerdictBox
-              hasMastermind={content.hasMastermind}
-              killerSolved={killerSolved}
-              mastermindSolved={mastermindSolved}
-              onSubmitKiller={onSubmitKiller}
-              onSubmitMastermind={onSubmitMastermind}
-            />
+            <div className="order-4 lg:order-none min-w-0">
+              <VerdictBox
+                hasMastermind={content.hasMastermind}
+                killerSolved={killerSolved}
+                mastermindSolved={mastermindSolved}
+                onSubmitKiller={onSubmitKiller}
+                onSubmitMastermind={onSubmitMastermind}
+              />
+            </div>
           </div>
         </div>
       </div>

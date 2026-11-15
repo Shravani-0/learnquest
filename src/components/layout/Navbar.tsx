@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { signOut } from '@/app/auth/actions'
 import LogoMark from '@/components/brand/LogoMark'
@@ -22,7 +22,7 @@ export interface NavUser {
   clearance: string
 }
 
-function matchActive(href: string, pathname: string) {
+export function matchActive(href: string, pathname: string) {
   if (href === '/') return pathname === '/'
   if (href === '/adventures') return pathname === '/adventures' || pathname.startsWith('/adventures/')
   if (href === '/dashboard') return pathname.startsWith('/dashboard')
@@ -34,6 +34,21 @@ function matchActive(href: string, pathname: string) {
 export default function Navbar({ user }: { user: NavUser | null }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  // Close the menu on navigation (incl. back/forward), and on Escape.
+  useEffect(() => setMobileOpen(false), [pathname])
+  useEffect(() => {
+    if (!mobileOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMobileOpen(false)
+    document.addEventListener('keydown', onKey)
+    // Keep the page underneath from scrolling while the menu is open.
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [mobileOpen])
 
   return (
     <header className="sq-nav">
@@ -95,6 +110,12 @@ export default function Navbar({ user }: { user: NavUser | null }) {
 
       {mobileOpen && (
         <div className="sq-drawer" id="sq-mobile-menu">
+          <span className="sq-xp sq-drawer__xp">
+            <span className="sq-xp__dot" aria-hidden="true" />
+            <b>{user?.clearance ?? 'guest'}</b>
+            <span className="sq-xp__sep" aria-hidden="true">·</span>
+            <span className="sq-num">{(user?.xp ?? 0).toLocaleString()}</span> XP
+          </span>
           {navLinks.map((link) => (
             <Link
               key={link.href}
